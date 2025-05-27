@@ -5,6 +5,7 @@
 
 #include <array>
 #include <type_traits>
+#include <variant>
 
 namespace blazing_asm {
 
@@ -14,33 +15,55 @@ namespace blazing_asm {
 
     // ---- Register Enum ----
 
+
     enum class OperandSize : uint8_t { None = 0, Byte = 1, Word = 2, DWord = 4, QWord = 8 };
     enum class OperandType : uint8_t { None = 0, Immediate, Register, Memory };
 
-    enum Reg64 : uint8_t { RAX = 0, RCX, RDX, RBX, RSP, RBP, RSI, RDI };
-    enum Reg32 : uint8_t { EAX = 0, ECX, EDX, EBX, ESP, EBP, ESI, EDI };
+    enum Reg64 : uint8_t { RAX = 0, RCX, RDX, RBX, RSI = 6, RDI };
+    enum Reg32 : uint8_t { EAX = 0, ECX, EDX, EBX, ESI = 6, EDI };
     enum Reg16 : uint8_t { AX = 0, CX, DX, BX, SP, BP, SI, DI };
     enum Reg8 : uint8_t { AL = 0, CL, DL, BL };
 
     enum Reg8H : uint8_t { AH = 4, CH, DH, BH }; // REX disabled
     enum Reg8L : uint8_t { SPL = 4, BPL, SIL, DIL }; // REX enabled
 
-    enum RegX  : uint8_t {  R8,  R9,  R10,  R11,  R12,  R13,  R14,  R15 }; // Extended QWORD Registers
-    enum RegXD : uint8_t { R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D }; // Extended DWORD Registers
+    enum RegX  : uint8_t {  R8,  R9,  R10,  R11,  R14 = 6,  R15 }; // Extended QWORD Registers
+    enum RegXD : uint8_t { R8D, R9D, R10D, R11D, R14D = 6, R15D }; // Extended DWORD Registers
     enum RegXW : uint8_t { R8W, R9W, R10W, R11W, R12W, R13W, R14W, R15W }; // Extended WORD Registers
     enum RegXB : uint8_t { R8B, R9B, R10B, R11B, R12B, R13B, R14B, R15B }; // Extended BYTE Registers
+
+
+    // These registers require SIB byte in memory operands even without the index register
+    enum RegRSP : uint8_t { RSP = 4 };
+    enum RegESP : uint8_t { ESP = 4 };
+    enum RegR12 : uint8_t { R12 = 4 };
+    enum RegR12D : uint8_t { R12D = 4 };
+
+    // These registers can't be a base register with no displacement in memory operands
+    enum RegRBP : uint8_t { RBP = 5 };
+    enum RegEBP : uint8_t { EBP = 5 };
+    enum RegR13 : uint8_t { R13 = 5 };
+    enum RegR13D : uint8_t { R13D = 5 };
+
+    template <typename T, template <typename...> class Template>
+    struct is_specialization_of : std::false_type {};
+
+    template <template <typename...> class Template, typename... Args>
+    struct is_specialization_of<Template<Args...>, Template> : std::true_type {};
 
 
     // R8-R15 registers
     template<typename T>
     constexpr bool is_reg_r() {
         if constexpr (std::is_same_v<T, RegX> || std::is_same_v<T, RegXD> ||
+            std::is_same_v<T, RegR12> || std::is_same_v<T, RegR13> || 
+            std::is_same_v<T, RegR12D> || std::is_same_v<T, RegR13D> || 
             std::is_same_v<T, RegXW> || std::is_same_v<T, RegXB>)
             return true;
         return false;
     }
 
-    // R8-R15 registers
+    
     template<typename T>
     constexpr bool is_register() {
         if constexpr (
@@ -53,60 +76,184 @@ namespace blazing_asm {
             std::is_same_v<T, RegX> ||
             std::is_same_v<T, RegXD> ||
             std::is_same_v<T, RegXW> ||
-            std::is_same_v<T, RegXB>)
+            std::is_same_v<T, RegXB> ||
+            std::is_same_v<T, RegRSP> ||
+            std::is_same_v<T, RegESP> ||
+            std::is_same_v<T, RegR12> ||
+            std::is_same_v<T, RegR12D> ||
+            std::is_same_v<T, RegRBP> ||
+            std::is_same_v<T, RegEBP> ||
+            std::is_same_v<T, RegR13> ||
+            std::is_same_v<T, RegR13D>
+            )
             return true;
         return false;
     }
 
+    template<typename T>
+    constexpr bool is_reg64() {
+        if constexpr (is_register<T>() && get_op_size<T>() == OperandSize::QWord)
+            return true;
+        return false;
+    }
 
-    template <typename BaseRegT = nulltype_t, typename IndexRegT = nulltype_t>
+    template<typename T>
+    constexpr bool is_reg32() {
+        if constexpr (is_register<T>() && get_op_size<T>() == OperandSize::DWord)
+            return true;
+        return false;
+    }
+
+    template<typename T>
+    constexpr bool is_imm() {
+        if constexpr (
+            std::is_same_v<T, uint64_t> ||
+            std::is_same_v<T, int64_t> ||
+            std::is_same_v<T, uint32_t> ||
+            std::is_same_v<T, int32_t> ||
+            std::is_same_v<T, uint16_t> ||
+            std::is_same_v<T, int16_t> ||
+            std::is_same_v<T, uint8_t> ||
+            std::is_same_v<T, int8_t>)
+            return true;
+        return false;
+    }
+
+    template<typename B, typename I>
+    static constexpr bool require_sib() {
+        if constexpr (
+            std::is_same_v<B, RegRSP> ||
+            std::is_same_v<B, RegESP> ||
+            std::is_same_v<B, RegR12> ||
+            std::is_same_v<B, RegR12D>)
+            return true;
+        if constexpr (!std::is_same_v<I, nulltype_t>)
+            return true;
+
+        return false;
+    }
+    template<typename B, typename D>
+    static constexpr bool require_disp() {
+        if constexpr (
+            std::is_same_v<B, RegRBP> ||
+            std::is_same_v<B, RegEBP> ||
+            std::is_same_v<B, RegR13> ||
+            std::is_same_v<B, RegR13D>)
+            return true;
+
+        if constexpr (!std::is_same_v<D, nulltype_t>)
+            return true;
+
+        return false;
+    }
+
+
+    template <typename OpSizeT = nulltype_t, typename BaseRegT = nulltype_t, typename IndexRegT = nulltype_t, typename DispSizeT = nulltype_t>
     struct Memory {
+        static_assert(is_reg64<BaseRegT>() || is_reg32<BaseRegT>() || std::is_same_v<BaseRegT, nulltype_t>, "Invalid base register type");
+        static_assert(is_reg64<IndexRegT>() || is_reg32<IndexRegT>() || std::is_same_v<IndexRegT, nulltype_t>, "Invalid index register type");
 
+
+        static_assert(get_op_size<BaseRegT>() == get_op_size<IndexRegT>() || std::is_same_v<BaseRegT, nulltype_t> || std::is_same_v<IndexRegT, nulltype_t>, "Invalid base/index expression");
+
+        static_assert(!std::is_same_v<OpSizeT, nulltype_t>, "Invalid operand size");
+        static_assert((is_imm<DispSizeT>() && (get_op_size<DispSizeT>() == OperandSize::Byte || get_op_size<DispSizeT>() == OperandSize::DWord)) || std::is_same_v<DispSizeT, nulltype_t>, "Invalid displacement size");
+
+        using BaseReg = BaseRegT;
+        using IndexReg = IndexRegT;
+        using OpSize = OpSizeT;
+        using DispSize = DispSizeT;
+
+
+        BaseRegT base;
+        IndexRegT index;
+
+        uint8_t scale;
+        DispSizeT disp;
+
+        //static constexpr bool has_disp = require_disp<BaseRegT, DispSizeT>();
+        //static constexpr bool has_sib = require_sib<BaseRegT, IndexRegT>();
     };
 
     template <typename Type>
     constexpr OperandSize get_op_size() {
-        if constexpr (std::is_same_v<Type, Reg64> || std::is_same_v<Type, RegX> || std::is_same_v<Type, uint64_t>)
-        {
-            return OperandSize::QWord;
-        }
-        if constexpr (std::is_same_v<Type, Reg32> || std::is_same_v<Type, RegXD> || std::is_same_v<Type, uint32_t>)
-        {
-            return OperandSize::DWord;
-        }
-        if constexpr (std::is_same_v<Type, Reg16> || std::is_same_v<Type, RegXW> || std::is_same_v<Type, uint16_t>)
-        {
-            return OperandSize::Word;
-        }
-        if constexpr (std::is_same_v<Type, Reg8L> || std::is_same_v<Type, Reg8H> || std::is_same_v<Type, Reg8> || std::is_same_v<Type, RegXB> || std::is_same_v<Type, uint8_t>)
-        {
-            return OperandSize::Byte;
-        }
+        if constexpr (
+            std::is_same_v<Type, RegRSP> ||
+            std::is_same_v<Type, RegRBP> ||
+            std::is_same_v<Type, RegR12> ||
+            std::is_same_v<Type, RegR13> ||
+            std::is_same_v<Type, Reg64> ||
+            std::is_same_v<Type, RegX> ||
+            std::is_same_v<Type, uint64_t> ||
+            std::is_same_v<Type, int64_t>)
+                return OperandSize::QWord;
+
+
+        if constexpr (
+            std::is_same_v<Type, RegESP> ||
+            std::is_same_v<Type, RegEBP> ||
+            std::is_same_v<Type, RegR12D> ||
+            std::is_same_v<Type, RegR13D> ||
+            std::is_same_v<Type, Reg32> ||
+            std::is_same_v<Type, RegXD> ||
+            std::is_same_v<Type, uint32_t> ||
+            std::is_same_v<Type, int32_t>)
+                return OperandSize::DWord;
+
+        if constexpr (
+            std::is_same_v<Type, Reg16> ||
+            std::is_same_v<Type, RegXW> ||
+            std::is_same_v<Type, uint16_t> ||
+            std::is_same_v<Type, int16_t>)
+                return OperandSize::Word;
+
+        if constexpr (
+            std::is_same_v<Type, Reg8L> ||
+            std::is_same_v<Type, Reg8H> ||
+            std::is_same_v<Type, Reg8> ||
+            std::is_same_v<Type, RegXB> ||
+            std::is_same_v<Type, uint8_t> ||
+            std::is_same_v<Type, int8_t>)
+                return OperandSize::Byte;
+
+        if constexpr (is_specialization_of<Type, Memory>::value)
+            return get_op_size<typename Type::OpSize>();
+        
+
         return OperandSize::None;
 
     }
 
+    
+
     template <typename Type>
     constexpr OperandType get_op_type() {
-        if constexpr (std::is_same_v<Type, uint64_t> || std::is_same_v<Type, uint32_t> || std::is_same_v<Type, uint16_t> || std::is_same_v<Type, uint8_t>)
+        if constexpr (is_imm<Type>())
         {
             return OperandType::Immediate;
         }
         if constexpr (is_register<Type>()) {
             return OperandType::Register;
         }
-        /*if constexpr (std::is_same_v<Type, Memory>)
+        if constexpr (is_specialization_of<Type, Memory>::value)
         {
             return OperandType::Memory;
-        }*/
-
+        }
         return OperandType::None;
     }
 
     template <typename RegType>
     constexpr bool op_requires_rex() {
 
-        if constexpr (std::is_same_v<RegType, Reg8L> || is_reg_r<RegType>() || std::is_same_v<RegType, Reg64>)
+        if constexpr (is_specialization_of<RegType, Memory>::value) {
+            using IndexRegT = typename RegType::IndexReg;
+            using BaseRegT = typename RegType::BaseReg;
+
+            if constexpr (is_reg_r<IndexRegT>() || is_reg_r<BaseRegT>())
+                return true;
+        }
+
+        if constexpr (std::is_same_v<RegType, Reg8L> || is_reg_r<RegType>() || is_reg64<RegType>())
             return true;
         return false;
     }
@@ -123,16 +270,46 @@ namespace blazing_asm {
 
         uint8_t rex = 0x40; // Base REX prefix
 
-        if constexpr (!std::is_same_v<RegSrc, nulltype_t> && (std::is_same_v<RegDest, Reg64> || std::is_same_v<RegDest, RegX>))
+        if constexpr (!std::is_same_v<RegSrc, nulltype_t> && get_op_size<RegDest>() == OperandSize::QWord)
             rex |= 0x08; // REX.W
 
-        // R bit (modrm.reg extension - source register)
-        if constexpr (is_reg_r<RegSrc>())
-            rex |= 0x04;
 
-        // B bit (modrm.rm extension - destination register)
-        if constexpr (is_reg_r<RegDest>())
-            rex |= 0x01;
+        if constexpr (!is_specialization_of<RegSrc, Memory>::value) {
+            // R bit (modrm.reg extension - source register)
+            if constexpr (is_reg_r<RegSrc>())
+                rex |= 0x04;
+
+
+            if constexpr (is_specialization_of<RegDest, Memory>::value) {
+                using IndexRegT = typename RegDest::IndexReg;
+                using BaseRegT = typename RegDest::BaseReg;
+
+                if constexpr (is_reg_r<BaseRegT>())
+                    rex |= 0x01; // Rex.B
+
+                if constexpr (is_reg_r<IndexRegT>())
+                    rex |= 0x02; // Rex.X
+            }
+            else {
+                if constexpr (is_reg_r<RegDest>())
+                    rex |= 0x01; // B bit (modrm.rm extension - destination register)
+            }
+            
+        }
+        else {
+            if constexpr (is_reg_r<RegDest>())
+                rex |= 0x04;
+
+            using IndexRegT = typename RegSrc::IndexReg;
+            using BaseRegT = typename RegSrc::BaseReg;
+
+            if constexpr (is_reg_r<BaseRegT>())
+                rex |= 0x01; // Rex.B
+
+            if constexpr (is_reg_r<IndexRegT>())
+                rex |= 0x02; // Rex.X
+
+        }
 
         return rex;
     }
@@ -194,6 +371,40 @@ namespace blazing_asm {
 
     }
 
+    template <typename MemoryT>
+    constexpr void mem_calc_op_size(size_t &sz) {
+        using BaseRegT = typename MemoryT::BaseReg;
+        using IndexRegT = typename MemoryT::IndexReg;
+        using DispSizeT = typename MemoryT::DispSize;
+
+        if constexpr (is_reg32<BaseRegT>() || is_reg32<IndexRegT>())
+            sz++;
+
+        if constexpr (require_disp<BaseRegT, DispSizeT>())
+        {
+            if constexpr (std::is_same_v<DispSizeT, nulltype_t>)
+                sz++;
+            else
+                sz += size_t(get_op_size<DispSizeT>());
+        }
+
+        if constexpr (require_sib<BaseRegT, IndexRegT>())
+            sz++;
+
+    }
+
+    template <typename BaseReg, typename DispSize>
+    constexpr uint8_t mem_get_mod () {
+        if constexpr (!require_disp<BaseReg, DispSize>())
+            return 0b00;
+        if constexpr (std::is_same_v<DispSize, nulltype_t> || get_op_size<DispSize>() == OperandSize::Byte)
+            return 0b01;
+
+        return 0b10; // DWord
+
+    }
+
+
 
 
     // ---- MOV ----
@@ -202,15 +413,18 @@ namespace blazing_asm {
         static constexpr OperandHelper<FirstType> op1;
         static constexpr OperandHelper<SecondType> op2;
 
+        
+
         FirstType op1_val;
         SecondType op2_val;
 
-        //static const bool rex;
 
         static constexpr size_t calc_array_size() {
 
+            
 
             static_assert(op1.type != OperandType::Immediate, "MOV: First operand can't be an Immediate");
+            static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Memory, "MOV: Memory to memory is illegal");
             static_assert(op1.type != OperandType::None, "MOV: Unknown first operand type");
             static_assert(op2.type != OperandType::None, "MOV: Unknown second operand type");
 
@@ -228,13 +442,13 @@ namespace blazing_asm {
 
             size_t sz = 1;
 
-            if (op_calculate_rex<FirstType, SecondType>() != 0)
+            if constexpr (op_calculate_rex<FirstType, SecondType>() != 0)
                 sz++;
 
-            if (op1.size == OperandSize::Word)
+            if constexpr (op1.size == OperandSize::Word)
                 sz++;
 
-            if (op2.type == OperandType::Immediate) {
+            if constexpr (op2.type == OperandType::Immediate) {
 
                 if (op1.size == OperandSize::QWord && op2.size < OperandSize::QWord)
                     sz += size_t(OperandSize::DWord) + 1;
@@ -242,9 +456,13 @@ namespace blazing_asm {
                     sz += size_t(op1.size);
 
             }
-            else if (op2.type == OperandType::Register)
+            else if constexpr (op2.type == OperandType::Register)
                 sz++;
-            
+
+            if constexpr (op1.type == OperandType::Memory) 
+                mem_calc_op_size<FirstType>(sz);
+            else if constexpr (op2.type == OperandType::Memory)
+                mem_calc_op_size<SecondType>(sz);
 
             return sz;
         }
@@ -259,6 +477,15 @@ namespace blazing_asm {
 
             if constexpr (op1.type == OperandType::Register) {
 
+                if constexpr (op2.type == OperandType::Memory) {
+                    
+
+                    using IndexRegT = typename SecondType::IndexReg;
+                    using BaseRegT = typename SecondType::BaseReg;
+
+                    if constexpr (is_reg32<BaseRegT>() || is_reg32<IndexRegT>())
+                        out[index++] = 0x67;
+                }
 
                 if constexpr (op1.size == OperandSize::Word)
                     out[index++] = 0x66;
@@ -308,7 +535,44 @@ namespace blazing_asm {
 
                 }
                 else if constexpr (op2.type == OperandType::Memory) {
+                    using IndexRegT = typename SecondType::IndexReg;
+                    using BaseRegT = typename SecondType::BaseReg;
+                    using DispSizeT = typename SecondType::DispSize;
 
+                    out[index] = 0x8A;
+
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index] += 0x1;
+
+                    index++;
+
+                    constexpr uint8_t mod = mem_get_mod<BaseRegT, DispSizeT>();
+
+                    if constexpr (require_sib<BaseRegT, IndexRegT>()) {
+                        out[index++] = (mod << 6) | (0x4 << 3) | (op1_val & 0x7);
+
+                        // ...
+                        // ...
+                        //out[index++] = (mod << 6) | (0x4 << 3) | (op1_val & 0x7);
+
+
+                    }
+                    else {
+                        if constexpr (std::is_same_v<BaseRegT, nulltype_t>)
+                            out[index++] = (mod << 6) | (op1_val & 0x7);
+                        else
+                            out[index++] = (mod << 6) | (op2_val.base << 3) | (op1_val & 0x7);
+                    }
+
+
+                    if constexpr (mod == 0b01) {
+                        if constexpr (std::is_same_v<DispSizeT, nulltype_t>)
+                            ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(0));
+                        else
+                            ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val.disp));
+                    }
+                    else if constexpr (mod == 0b10)
+                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val.disp));
 
 
                 }
@@ -423,6 +687,81 @@ namespace blazing_asm {
     }
 
     // ---- Helper APIs ----
+
+
+    template <typename BaseT = nulltype_t, typename IndexT = nulltype_t, typename DispSizeT = nulltype_t>
+    struct MemoryBuilder {
+        const BaseT base;
+        const IndexT index;
+        const uint8_t scale;
+        const DispSizeT disp;
+
+        template <typename Size>
+        constexpr auto build() {
+
+            /*auto dispT =  (uint32_t(disp) <= UINT8_MAX) ? uint8_t(disp) :
+                (uint32_t(disp) <= UINT16_MAX) ? uint16_t(disp) :
+                uint32_t(disp);*/
+            
+
+            //auto sib_byte = getSIBConditional<BaseT>(base);
+
+
+            return Memory<Size, BaseT, IndexT, DispSizeT> {base, index, scale, disp};
+
+        }
+    };
+
+
+
+    template <typename BaseT, typename DispSizeT, typename = std::enable_if_t<is_register<BaseT>() && is_imm<DispSizeT>()>>
+    constexpr MemoryBuilder<BaseT, nulltype_t, DispSizeT> operator+(BaseT base, DispSizeT disp) {
+        return  { base, {}, 1, disp };
+    }
+
+
+    template <typename BaseT, typename IndexT, typename = std::enable_if_t<is_register<BaseT>() && is_register<IndexT>()>>
+    constexpr MemoryBuilder<BaseT, IndexT> operator+(BaseT base, IndexT index) {
+        return { base, index, 1, {} };
+    }
+
+
+    template <typename BaseT, typename IndexT, typename DispSizeT, typename = std::enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
+    constexpr MemoryBuilder<BaseT, IndexT, DispSizeT> operator+(MemoryBuilder<BaseT, IndexT, nulltype_t> mb, DispSizeT disp) {
+        return { mb.base, mb.index, 1, disp };
+    }
+
+
+    template <typename IndexT, typename = std::enable_if_t<is_register<IndexT>()>>
+    constexpr MemoryBuilder<nulltype_t, IndexT, nulltype_t> operator*(IndexT index, uint8_t scale) {
+        return { {}, index, scale, {} };
+    }
+
+
+
+    template <typename Size>
+    struct MemSizeProxy {
+        template <typename B, typename I, typename D>
+        auto operator[](MemoryBuilder<B, I, D> builder) const {
+            return builder.build<Size>();
+        }
+
+        template <typename BaseT>
+        constexpr auto operator[](BaseT base) const {
+
+            return Memory<Size, BaseT>{base, {}, 1, {}};
+        }
+    };
+
+    struct MemProxy {
+        static constexpr MemSizeProxy<uint8_t>  BYTE{};
+        static constexpr MemSizeProxy<uint16_t>  WORD{};
+        static constexpr MemSizeProxy<uint32_t> DWORD{};
+        static constexpr MemSizeProxy<uint64_t> QWORD{};
+    };
+
+    constexpr MemProxy Mem{};
+
 
 
     template <typename T1, typename T2>
