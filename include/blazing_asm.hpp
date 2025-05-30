@@ -772,19 +772,19 @@ namespace blazing_asm {
     // [RAX + 0x100]
     template <typename BaseT, typename DispSizeT, typename = std::enable_if_t<is_register<BaseT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, nulltype_t, DispSizeT> operator+(BaseT base, DispSizeT disp) {
-        return  { base, {}, 1, disp };
+        return  { base, {}, SCALING_NONE, disp };
     }
 
     // [RAX + RBX]
     template <typename BaseT, typename IndexT, typename = std::enable_if_t<is_register<BaseT>() && is_register<IndexT>()>>
     constexpr MemoryBuilder<BaseT, IndexT> operator+(BaseT base, IndexT index) {
-        return { base, index, 1, {} };
+        return { base, index, SCALING_NONE, {} };
     }
 
     // [ (RAX + RBX) + (0x100) ] or [ ( RAX + RBX * SCALING_W ) + (0x100) ]
     template <typename BaseT, typename IndexT, typename DispSizeT, typename = std::enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, IndexT, DispSizeT> operator+(MemoryBuilder<BaseT, IndexT, nulltype_t> mb, DispSizeT disp) {
-        return { mb.base, mb.index, 1, disp };
+        return { mb.base, mb.index, SCALING_NONE, disp };
     }
 
     // [RAX * SCALING_W]
