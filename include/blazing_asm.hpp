@@ -1,7 +1,41 @@
-#ifndef BLAZING_ASSEMBLER_HPP
-#define BLAZING_ASSEMBLER_HPP
+/*
+    Copyright (c) 2025 - Present, 0x1c1101 (a.k.a. heapsoverflow) and contributors
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+    LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+    WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+    --- Optional exception to the license ---
+
+    As an exception, if, as a result of your compiling your source code, portions
+    of this Software are embedded into a machine-executable object form of such
+    source code, you may redistribute such embedded portions in such object form
+    without including the above copyright and permission notices.
+
+*/
+
+// See https://github.com/0x1c1101/blazing_asm for updates and documentation
+
 
 #pragma once
+
+#ifndef BLAZING_ASSEMBLER_HPP
+#define BLAZING_ASSEMBLER_HPP
 
 #include <array>
 #include <type_traits>
@@ -694,14 +728,111 @@ namespace blazing_asm {
         }
     };
 
+    // ---- LEA ----
+    template <typename FirstType, typename SecondType>
+    struct LeaInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        static constexpr OperandHelper<SecondType> op2;
 
-    // ---- RET ----
-    struct Ret {
-        static constexpr size_t size = 1;
-        constexpr std::array<uint8_t, size> encode() const {
-            return { 0xC3 };  // RET opcode
+
+        FirstType op1_val;
+        SecondType op2_val;
+
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(op1.type == OperandType::Register && op2.type == OperandType::Memory, "LEA: Operand structure has to be in REG, MEM format");
+
+            static_assert(op1.type != OperandType::None, "LEA: Unknown first operand type");
+            static_assert(op2.type != OperandType::None, "LEA: Unknown second operand type");
+
+            static_assert(op1.size != OperandSize::None, "LEA: Unknown first operand size");
+            static_assert(op2.size != OperandSize::None, "LEA: Unknown second operand size");
+
+
+            static_assert(op1.size == op2.size, "LEA: Both operands have to be the same size");
+            static_assert((op1.size == OperandSize::DWord || op1.size == OperandSize::QWord) && (op2.size == OperandSize::DWord || op2.size == OperandSize::QWord), "LEA: Invalid operand size");
+
+            // lea reg, mem
+
+
+            size_t sz = 1;
+
+            if constexpr (op_calculate_rex<FirstType, SecondType>() != 0)
+                sz++;
+
+            mem_calc_op_size<SecondType>(sz);
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+
+
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            handle_prefix<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+
+            out[index++] = 0x8D;
+
+
+            mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
         }
     };
+
+    // ---- Fixed Size Instructions ----
+    enum class FixedInstrType : uint8_t {
+        RET = 0,
+        NOP,
+        PUSHF,
+        POPF
+    };
+    struct FixedSizeInstr {
+        static constexpr std::array<uint8_t, 4> fixed_instr_table {
+            0xC3,
+            0x90,
+            0x9C,
+            0x9D
+        };
+        FixedInstrType index;
+        static constexpr size_t size = 1;
+        constexpr std::array<uint8_t, size> encode() const {
+            return { fixed_instr_table.at(static_cast<uint8_t>(index)) };
+        }
+    };
+
+
+
+    // ---- Append Bytes ----
+    template <typename... Bytes>
+    struct ByteInstr {
+        static constexpr size_t size = sizeof...(Bytes);
+
+        std::array<uint8_t, size> bytes_array;
+
+        constexpr ByteInstr(Bytes... bytes) : bytes_array{ static_cast<uint8_t>(bytes)... } {}
+
+        constexpr std::array<uint8_t, size> encode() const {
+            return bytes_array;
+        }
+    };
+
+
 
 #pragma endregion Instructions
 
@@ -784,7 +915,7 @@ namespace blazing_asm {
     // [ (RAX + RBX) + (0x100) ] or [ ( RAX + RBX * SCALING_W ) + (0x100) ]
     template <typename BaseT, typename IndexT, typename DispSizeT, typename = std::enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, IndexT, DispSizeT> operator+(MemoryBuilder<BaseT, IndexT, nulltype_t> mb, DispSizeT disp) {
-        return { mb.base, mb.index, SCALING_NONE, disp };
+        return { mb.base, mb.index, mb.scale, disp };
     }
 
     // [RAX * SCALING_W]
@@ -846,9 +977,31 @@ namespace blazing_asm {
     constexpr auto mov(T1 type1, T2 type2) {
         return MovInstr<T1, T2> { type1, type2 };
     }
+    
+    template <typename T1, typename T2>
+    constexpr auto lea(T1 type1, T2 type2) {
+        return LeaInstr<T1, T2> { type1, type2 };
+    }
 
-    constexpr Ret ret() {
-        return Ret{};
+    template <typename... BytesT>
+    constexpr auto append(BytesT&&... bytes) {
+        return ByteInstr<std::decay_t<BytesT>...>{std::forward<BytesT>(bytes)...};
+    }
+
+    constexpr FixedSizeInstr ret() {
+        return FixedSizeInstr { FixedInstrType::RET };
+    }
+
+    constexpr FixedSizeInstr nop() {
+        return FixedSizeInstr{ FixedInstrType::NOP };
+    }
+
+    constexpr FixedSizeInstr pushf() {
+        return FixedSizeInstr{ FixedInstrType::PUSHF };
+    }
+
+    constexpr FixedSizeInstr popf() {
+        return FixedSizeInstr{ FixedInstrType::POPF };
     }
 
 #pragma endregion HelperAPI
