@@ -84,6 +84,10 @@ namespace blazing_asm {
     enum RegR13 : uint8_t { R13 = 5 };
     enum RegR13D : uint8_t { R13D = 5 };
 
+    // For relative offset
+    enum RegRIP : uint8_t { RIP };
+    enum RegEIP : uint8_t { EIP };
+
     template <typename T, template <typename...> class Template>
     struct is_specialization_of : std::false_type {};
 
@@ -123,7 +127,9 @@ namespace blazing_asm {
             std::is_same_v<T, RegRBP> ||
             std::is_same_v<T, RegEBP> ||
             std::is_same_v<T, RegR13> ||
-            std::is_same_v<T, RegR13D>
+            std::is_same_v<T, RegR13D> ||
+            std::is_same_v<T, RegRIP> ||
+            std::is_same_v<T, RegEIP>
             )
             return true;
         return false;
@@ -177,6 +183,8 @@ namespace blazing_asm {
     template<typename B, typename I, typename D>
     static constexpr bool require_disp() {
         if constexpr (
+            std::is_same_v<B, RegRIP> ||
+            std::is_same_v<B, RegEIP> ||
             std::is_same_v<B, RegRBP> ||
             std::is_same_v<B, RegEBP> ||
             std::is_same_v<B, RegR13> ||
@@ -207,6 +215,10 @@ namespace blazing_asm {
 
         static_assert(!std::is_same_v<IndexRegT, RegRSP>, "RSP can't be an index register.");
         static_assert(!std::is_same_v<IndexRegT, RegESP>, "ESP can't be an index register.");
+        static_assert(!std::is_same_v<IndexRegT, RegRIP>, "RIP can't be an index register.");
+        static_assert(!std::is_same_v<IndexRegT, RegEIP>, "EIP can't be an index register.");
+        static_assert(!((std::is_same_v<BaseRegT, RegEIP> || std::is_same_v<BaseRegT, RegRIP>) && !std::is_same_v<IndexRegT, nulltype_t>), "Can't use relative with an index register.");
+
 
         using BaseReg = BaseRegT;
         using IndexReg = IndexRegT;
@@ -226,6 +238,7 @@ namespace blazing_asm {
     template <typename Type>
     constexpr OperandSize get_op_size() {
         if constexpr (
+            std::is_same_v<Type, RegRIP> ||
             std::is_same_v<Type, RegRSP> ||
             std::is_same_v<Type, RegRBP> ||
             std::is_same_v<Type, RegR12> ||
@@ -238,6 +251,7 @@ namespace blazing_asm {
 
 
         if constexpr (
+            std::is_same_v<Type, RegEIP> ||
             std::is_same_v<Type, RegESP> ||
             std::is_same_v<Type, RegEBP> ||
             std::is_same_v<Type, RegR12D> ||
@@ -431,9 +445,10 @@ namespace blazing_asm {
         if constexpr (is_reg32<BaseRegT>() || is_reg32<IndexRegT>())
             sz++;
 
+
         if constexpr (require_disp<BaseRegT, IndexRegT, DispSizeT>())
         {
-            if constexpr (std::is_same_v<BaseRegT, nulltype_t>)
+            if constexpr (std::is_same_v<BaseRegT, nulltype_t> || std::is_same_v<BaseRegT, RegRIP> || std::is_same_v<BaseRegT, RegEIP>)
                 sz += 4;
             else if constexpr (std::is_same_v<DispSizeT, nulltype_t>)
                 sz++;
@@ -454,7 +469,7 @@ namespace blazing_asm {
         if constexpr (!require_disp<BaseReg, IndexReg, DispSize>())
             return 0b00; // None
 
-        if constexpr (std::is_same_v<BaseReg, nulltype_t>)
+        if constexpr (std::is_same_v<BaseReg, nulltype_t> || std::is_same_v<BaseReg, RegRIP> || std::is_same_v<BaseReg, RegEIP>)
             return 0b10; // DWord
 
         if constexpr (std::is_same_v<DispSize, nulltype_t> || get_op_size<DispSize>() == OperandSize::Byte)
@@ -473,9 +488,10 @@ namespace blazing_asm {
 
         constexpr uint8_t mod = mem_get_mod<BaseRegT, IndexRegT, DispSizeT>();
 
-        if constexpr (require_sib<BaseRegT, IndexRegT>()) {
-
-            
+        if constexpr (std::is_same_v<BaseRegT, RegRIP> || std::is_same_v<BaseRegT, RegEIP>) {
+            out[index++] = 0x5; // Relative
+        }
+        else if constexpr (require_sib<BaseRegT, IndexRegT>()) {
             if constexpr (std::is_same_v<BaseRegT, nulltype_t>) {
 
                 // (0b00 << 6) | ((reg & 0x7) << 3) | (0x4)
@@ -511,13 +527,11 @@ namespace blazing_asm {
 
             }
         }
-        else {
-
-            if constexpr (!std::is_same_v<isSrcMem, nulltype_t>)
-                out[index++] = (mod << 6) | ((reg & 0x7) << 3) | (mem.base & 0x7);
-            else
-                out[index++] = (mod << 6) | ((mem.base & 0x7) << 3) | (reg & 0x7);
-        }
+        else if constexpr (!std::is_same_v<isSrcMem, nulltype_t>)
+            out[index++] = (mod << 6) | ((reg & 0x7) << 3) | (mem.base & 0x7);
+        else
+            out[index++] = (mod << 6) | ((mem.base & 0x7) << 3) | (reg & 0x7);
+        
 
 
         if constexpr (mod == 0b01) {
@@ -595,6 +609,7 @@ namespace blazing_asm {
 
             
 
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "MOV: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate, "MOV: First operand can't be an Immediate");
             static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Memory, "MOV: Memory to memory is illegal");
             static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Immediate, "MOV: Immediate to memory is illegal");
@@ -740,6 +755,7 @@ namespace blazing_asm {
 
 
         static constexpr size_t calc_array_size() {
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "LEA: Can't use RIP/EIP");
 
             static_assert(op1.type == OperandType::Register && op2.type == OperandType::Memory, "LEA: Operand structure has to be in REG, MEM format");
 
@@ -956,9 +972,9 @@ namespace blazing_asm {
         constexpr auto operator[](BaseT base) const {
 
             if constexpr (is_register<BaseT>())
-                return Memory<Size, BaseT>{base, {}, 1, {}};
+                return Memory<Size, BaseT>{base, {}, SCALING_NONE, {}};
             else
-                return Memory<Size, nulltype_t, nulltype_t, BaseT>{{}, {}, 1, base};
+                return Memory<Size, nulltype_t, nulltype_t, BaseT>{{}, {}, SCALING_NONE, base};
         }
 
 
