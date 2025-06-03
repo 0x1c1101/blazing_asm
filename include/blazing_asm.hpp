@@ -55,6 +55,7 @@ namespace blazing_asm {
     enum ScalingSize : uint8_t { SCALING_NONE = 0b00, SCALING_W = 0b01, SCALING_D = 0b10, SCALING_Q = 0b11 };
 
     enum OP_EXTENSION : uint8_t {
+        // GRP1
         OP_ADD = 0b000,
         OP_OR = 0b001,
         OP_ADC = 0b010,
@@ -62,7 +63,25 @@ namespace blazing_asm {
         OP_AND = 0b100,
         OP_SUB = 0b101,
         OP_XOR = 0b110,
-        OP_CMP = 0b111
+        OP_CMP = 0b111,
+
+        // GRP2
+        OP_ROL = 0b000,  // Rotate left
+        OP_ROR = 0b001,  // Rotate right
+        OP_RCL = 0b010,  // Rotate through carry left
+        OP_RCR = 0b011,  // Rotate through carry right
+        OP_SHL = 0b100,  // Shift left (same as SAL)
+        OP_SAL = 0b100,  // Shift arithmetic left (same as SHL)
+        OP_SHR = 0b101,  // Shift right logical
+        OP_SAR = 0b111,  // Shift arithmetic right
+        
+    };
+
+    enum class FixedInstrType : uint8_t {
+        RET = 0xC3,
+        NOP = 0x90,
+        PUSHF = 0x9C,
+        POPF = 0x9D
     };
 
     enum class OperandSize : uint8_t { None = 0, Byte = 1, Word = 2, DWord = 4, QWord = 8 };
@@ -71,7 +90,7 @@ namespace blazing_asm {
     enum Reg64 : uint8_t { RCX = 1, RDX, RBX, RSI = 6, RDI };
     enum Reg32 : uint8_t { ECX = 1, EDX, EBX, ESI = 6, EDI };
     enum Reg16 : uint8_t { CX = 1, DX, BX, SP, BP, SI, DI };
-    enum Reg8 : uint8_t { CL = 1, DL, BL };
+    enum Reg8 : uint8_t { DL = 2, BL };
 
     enum Reg8H : uint8_t { AH = 4, CH, DH, BH }; // REX disabled
     enum Reg8L : uint8_t { SPL = 4, BPL, SIL, DIL }; // REX enabled
@@ -103,6 +122,10 @@ namespace blazing_asm {
     enum RegEAX : uint8_t { EAX = 0 };
     enum RegAX : uint8_t { AX = 0 };
     enum RegAL : uint8_t { AL = 0 };
+
+    // GRP2 instructions (Only allowed register for the source operand)
+    enum RegCL : uint8_t { CL = 1 };
+
 
     template <typename T, template <typename...> class Template>
     struct is_specialization_of : std::false_type {};
@@ -148,6 +171,7 @@ namespace blazing_asm {
             std::is_same_v<T, RegEAX> ||
             std::is_same_v<T, RegAX> ||
             std::is_same_v<T, RegAL> ||
+            std::is_same_v<T, RegCL> ||
             std::is_same_v<T, RegRIP> ||
             std::is_same_v<T, RegEIP>
             )
@@ -305,6 +329,7 @@ namespace blazing_asm {
 
         if constexpr (
             std::is_same_v<Type, RegAL> ||
+            std::is_same_v<Type, RegCL> ||
             std::is_same_v<Type, Reg8L> ||
             std::is_same_v<Type, Reg8H> ||
             std::is_same_v<Type, Reg8> ||
@@ -898,7 +923,7 @@ namespace blazing_asm {
     };
 
 
-    // ---- Arithmetic/Logical Instructions ----
+    // ---- Arithmetic/Logical Instructions (GRP1) ----
     template <typename FirstType, typename SecondType>
     struct ArithmeticInstr {
         static constexpr OperandHelper<FirstType> op1;
@@ -1087,25 +1112,107 @@ namespace blazing_asm {
         }
     };
     
-    
-    // ---- Fixed Size Instructions ----
-    enum class FixedInstrType : uint8_t {
-        RET = 0,
-        NOP,
-        PUSHF,
-        POPF
+    // ---- Shift and Rotate Instructions (GRP2) ----
+    template <typename FirstType, typename SecondType>
+    struct ShiftRotInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        static constexpr OperandHelper<SecondType> op2;
+
+        FirstType op1_val;
+        SecondType op2_val;
+
+        uint8_t op_ext;
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "Shift/Rotate: Can't use RIP/EIP");
+            static_assert(op1.type != OperandType::Immediate, "Shift/Rotate: First operand can't be an Immediate");
+
+            static_assert(op1.type != OperandType::None, "Shift/Rotate: Unknown first operand type");
+            static_assert(std::is_same_v<SecondType, std::true_type> || op2.type != OperandType::None, "Shift/Rotate: Unknown second operand type");
+
+            static_assert(op1.size != OperandSize::None, "Shift/Rotate: Unknown first operand size");
+            static_assert(std::is_same_v<SecondType, std::true_type> || op2.size != OperandSize::None, "Shift/Rotate: Unknown second operand size");
+            
+
+            static_assert(std::is_same_v<SecondType, RegCL> ||
+                std::is_same_v<SecondType, std::true_type> ||
+                (op2.type == OperandType::Immediate && op2.size == OperandSize::Byte), "Shift/Rotate: Invalid source operand");
+
+
+            size_t sz = 1;
+
+            if constexpr (op_calculate_rex<FirstType, SecondType>() != 0)
+                sz++;
+
+            if constexpr (op1.size == OperandSize::Word || (!is_imm<SecondType>() && op2.size == OperandSize::Word))
+                sz++;
+
+            if constexpr (op1.type == OperandType::Memory)
+                mem_calc_op_size<FirstType>(sz);
+            else if constexpr (op1.type == OperandType::Register)
+                sz++;
+
+            if constexpr (op2.type == OperandType::Immediate)
+                sz++;
+            
+            
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+
+
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            handle_prefix<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+
+            out[index] = 0xC0; // rol mem, 0x2
+
+            if constexpr (op2.type == OperandType::Register)
+                out[index] = 0xD2; // rol mem, cl
+            else if constexpr (std::is_same_v<SecondType, std::true_type>)
+                out[index] = 0xD0; // rol mem, 1
+
+
+            if constexpr (op1.size != OperandSize::Byte)
+                out[index]++;
+
+            index++;
+
+            if constexpr (op1.type == OperandType::Register)
+                out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
+            else if constexpr (op1.type == OperandType::Memory)
+                mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
+
+
+            if constexpr (op2.type == OperandType::Immediate)
+                ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
     };
+
+
+    // ---- Fixed Size Instructions ----
     struct FixedSizeInstr {
-        static constexpr std::array<uint8_t, 4> fixed_instr_table {
-            0xC3,
-            0x90,
-            0x9C,
-            0x9D
-        };
-        FixedInstrType index;
+        FixedInstrType opcode;
         static constexpr size_t size = 1;
         constexpr std::array<uint8_t, size> encode() const {
-            return { fixed_instr_table.at(static_cast<uint8_t>(index)) };
+            return { static_cast<uint8_t>(opcode) };
         }
     };
 
@@ -1282,41 +1389,163 @@ namespace blazing_asm {
         static constexpr MemSizeProxy<uint64_t> QWORD{};
     };
 
-    constexpr MemProxy mem{};
+    constexpr MemProxy MEM {};
 
     template <typename T1, typename T2>
-    constexpr auto mov(T1 type1, T2 type2) {
+    constexpr auto MOV(T1 type1, T2 type2) {
         return MovInstr<T1, T2> { type1, type2 };
     }
     
     template <typename T1, typename T2>
-    constexpr auto lea(T1 type1, T2 type2) {
+    constexpr auto LEA(T1 type1, T2 type2) {
         return LeaInstr<T1, T2> { type1, type2 };
     }
 
+    // Define Bytes
     template <typename... BytesT>
-    constexpr auto append(BytesT&&... bytes) {
+    constexpr auto DB(BytesT&&... bytes) {
         return ByteInstr<std::decay_t<BytesT>...>{std::forward<BytesT>(bytes)...};
     }
 
     template <typename T1, typename T2>
-    constexpr auto add(T1 type1, T2 type2) {
+    constexpr auto ADD(T1 type1, T2 type2) {
         return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_ADD };
     }
+
+    template <typename T1, typename T2>
+    constexpr auto OR(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_OR };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto ADC(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_ADC };
+    }
     
-    constexpr FixedSizeInstr ret() {
+    template <typename T1, typename T2>
+    constexpr auto SBB(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_SBB };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto AND(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_AND };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto SUB(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_SUB };
+    }
+
+
+    template <typename T1, typename T2>
+    constexpr auto XOR(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_XOR };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto CMP(T1 type1, T2 type2) {
+        return ArithmeticInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_CMP };
+    }
+
+
+
+
+    template <typename T1, typename T2>
+    constexpr auto ROL(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_ROL };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto ROR(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_ROR };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto RCL(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_RCL };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto RCR(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_RCR };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto SHL(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_SHL };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto SAL(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_SAL };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto SHR(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_SHR };
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto SAR(T1 type1, T2 type2) {
+        return ShiftRotInstr<T1, T2> { type1, type2, OP_EXTENSION::OP_SAR };
+    }
+
+    template <typename T1>
+    constexpr auto ROL1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_ROL };
+    }
+
+    template <typename T1>
+    constexpr auto ROR1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_ROR };
+    }
+
+    template <typename T1>
+    constexpr auto RCL1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_RCL };
+    }
+
+    template <typename T1>
+    constexpr auto RCR1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_RCR };
+    }
+
+    template <typename T1>
+    constexpr auto SHL1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_SHL };
+    }
+
+    template <typename T1>
+    constexpr auto SAL1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_SAL };
+    }
+
+    template <typename T1>
+    constexpr auto SHR1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_SHR };
+    }
+
+    template <typename T1>
+    constexpr auto SAR1(T1 type1) {
+        return ShiftRotInstr<T1, std::true_type> { type1, {}, OP_EXTENSION::OP_SAR };
+    }
+
+
+
+    constexpr FixedSizeInstr RET() {
         return FixedSizeInstr { FixedInstrType::RET };
     }
 
-    constexpr FixedSizeInstr nop() {
+    constexpr FixedSizeInstr NOP() {
         return FixedSizeInstr{ FixedInstrType::NOP };
     }
 
-    constexpr FixedSizeInstr pushf() {
+    constexpr FixedSizeInstr PUSHF() {
         return FixedSizeInstr{ FixedInstrType::PUSHF };
     }
 
-    constexpr FixedSizeInstr popf() {
+    constexpr FixedSizeInstr POPF() {
         return FixedSizeInstr{ FixedInstrType::POPF };
     }
 
