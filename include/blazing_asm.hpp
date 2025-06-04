@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2025 - Present, 0x1c1101 (a.k.a. heapsoverflow) and contributors
+    Copyright (c) 2025 - Present, 0x1c1101 (a.k.a. heapsoverflow)
 
     Permission is hereby granted, free of charge, to any person obtaining
     a copy of this software and associated documentation files (the
@@ -34,6 +34,10 @@
 
 #pragma once
 
+#ifdef __INTELLISENSE__
+#pragma diag_suppress 304
+#endif
+
 #ifndef BLAZING_ASSEMBLER_HPP
 #define BLAZING_ASSEMBLER_HPP
 
@@ -48,11 +52,6 @@ namespace blazing_asm {
     struct nulltype_t {
 
     };
-
-    // ---- Register Enum ----
-
-
-    enum ScalingSize : uint8_t { SCALING_NONE = 0b00, SCALING_W = 0b01, SCALING_D = 0b10, SCALING_Q = 0b11 };
 
     enum OP_EXTENSION : uint8_t {
         // GRP1
@@ -74,6 +73,14 @@ namespace blazing_asm {
         OP_SAL = 0b100,  // Shift arithmetic left (same as SHL)
         OP_SHR = 0b101,  // Shift right logical
         OP_SAR = 0b111,  // Shift arithmetic right
+
+        // GRP3
+        OP_NOT = 0b010,  // One's complement negation
+        OP_NEG = 0b011,  // Two's complement negation
+        OP_MUL = 0b100,  // Unsigned multiply
+        OP_IMUL = 0b101,  // Signed multiply
+        OP_DIV = 0b110,  // Unsigned divide
+        OP_IDIV = 0b111,  // Signed divide
         
     };
 
@@ -84,6 +91,37 @@ namespace blazing_asm {
         POPF = 0x9D
     };
 
+    enum Conditions : uint8_t {
+        JE = 0x74,   // Jump if Equal (ZF set)
+        JZ = 0x74,   // Jump if Zero (ZF set)
+        JNE = 0x75,   // Jump if Not Equal (ZF clear)
+        JNZ = 0x75,   // Jump if Not Zero (ZF clear)
+        JB = 0x72,   // Jump if Below (CF set)
+        JC = 0x72,   // Jump if Carry (CF set)
+        JNAE = 0x72,  // Jump if Not Above or Equal (CF set)
+        JAE = 0x73,   // Jump if Above or Equal (CF clear)
+        JNC = 0x73,   // Jump if No Carry (CF clear)
+        JG = 0x7F,   // Jump if Greater (ZF clear and SF == OF)
+        JNLE = 0x7F,  // Jump if Not Less or Equal (ZF clear and SF == OF)
+        JGE = 0x7D,   // Jump if Greater or Equal (SF == OF)
+        JL = 0x7C,   // Jump if Less (SF != OF)
+        JNGE = 0x7C,  // Jump if Not Greater or Equal (SF != OF)
+        JLE = 0x7E,   // Jump if Less or Equal (ZF set or SF != OF)
+        JN = 0x75,   // Jump if Not (ZF clear) (same as JNZ)
+        JO = 0x70,   // Jump if Overflow (OF set)
+        JNO = 0x71,   // Jump if No Overflow (OF clear)
+        JS = 0x78,   // Jump if Sign (SF set)
+        JNS = 0x79,   // Jump if Not Sign (SF clear)
+        JP = 0x7A,   // Jump if Parity (PF set)
+        JPE = 0x7A,   // Jump if Parity Even (PF set)
+        JNP = 0x7B,   // Jump if No Parity (PF clear)
+        JPO = 0x7B,   // Jump if Parity Odd (PF clear)
+    };
+
+
+    // ---- Register Definitions ----
+
+    enum ScalingSize : uint8_t { SCALING_NONE = 0b00, SCALING_W = 0b01, SCALING_D = 0b10, SCALING_Q = 0b11 };
     enum class OperandSize : uint8_t { None = 0, Byte = 1, Word = 2, DWord = 4, QWord = 8 };
     enum class OperandType : uint8_t { None = 0, Immediate, Register, Memory };
 
@@ -383,11 +421,9 @@ namespace blazing_asm {
     template <typename RegDest, typename RegSrc>
     constexpr uint8_t op_calculate_rex() {
 
-        if constexpr (!is_imm<RegSrc>() || get_op_size<RegDest>() != OperandSize::QWord || !is_specialization_of<RegDest, Memory>::value)
-        {
-            if constexpr (!op_requires_rex<RegDest>() && !op_requires_rex<RegSrc>())
-                return 0;
-        }
+        //if constexpr (!is_imm<RegSrc>() || get_op_size<RegDest>() != OperandSize::QWord || !is_specialization_of<RegDest, Memory>::value)
+        if constexpr (get_op_size<RegDest>() != OperandSize::QWord && !op_requires_rex<RegDest>() && !op_requires_rex<RegSrc>())
+            return 0;
 
         
         // High 8-bit registers suppress REX
@@ -396,7 +432,10 @@ namespace blazing_asm {
 
         uint8_t rex = 0x40; // Base REX prefix
 
-        if constexpr (!std::is_same_v<RegSrc, nulltype_t> && get_op_size<RegDest>() == OperandSize::QWord)
+        //if constexpr (!std::is_same_v<RegSrc, nulltype_t> && get_op_size<RegDest>() == OperandSize::QWord)
+        //    rex |= 0x08; // REX.W
+
+        if constexpr (get_op_size<RegDest>() == OperandSize::QWord)
             rex |= 0x08; // REX.W
 
 
@@ -446,21 +485,6 @@ namespace blazing_asm {
         static constexpr OperandSize size = get_op_size<Type>();
     };
 
-    
-    // -- All 32-bit conditional jump opcodes (0F 8X)
-
-    /*enum class Condition : uint8_t {
-        JE = 0x84,
-        JNE = 0x85,
-        JL = 0x8C,
-        JLE = 0x8E,
-        JG = 0x8F,
-        JGE = 0x8D,
-        JB = 0x82,
-        JBE = 0x86,
-        JA = 0x87,
-        JAE = 0x83,
-    };*/
 
 #pragma endregion Definitions
 
@@ -1207,6 +1231,137 @@ namespace blazing_asm {
     };
 
 
+    // ---- Unary Arithmetic Instructions (GRP3) ----
+    template <typename FirstType>
+    struct UnaryArithInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        FirstType op1_val;
+        uint8_t op_ext;
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "Unary Arith: Can't use RIP/EIP");
+            static_assert(op1.type != OperandType::Immediate, "Unary Arith: First operand can't be an Immediate");
+
+            static_assert(op1.type != OperandType::None, "Unary Arith: Unknown first operand type");
+
+            static_assert(op1.size != OperandSize::None, "Unary Arith: Unknown first operand size");
+
+
+            size_t sz = 1;
+
+            if constexpr (op_calculate_rex<FirstType, nulltype_t>() != 0)
+                sz++;
+
+            if constexpr (op1.size == OperandSize::Word)
+                sz++;
+
+            if constexpr (op1.type == OperandType::Memory)
+                mem_calc_op_size<FirstType>(sz);
+            else if constexpr (op1.type == OperandType::Register)
+                sz++;
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+
+
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            handle_prefix<FirstType, nulltype_t>(out.data(), index, op1_val, {});
+
+            out[index] = 0xF6;
+
+            if constexpr (op1.size != OperandSize::Byte)
+                out[index]++;
+
+            index++;
+
+            if constexpr (op1.type == OperandType::Register)
+                out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
+            else if constexpr (op1.type == OperandType::Memory)
+                mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
+
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
+    };
+
+    // ---- Conditional Jumps ----
+    template <typename FirstType>
+    struct CondJmpInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        FirstType op1_val;
+        Conditions cond;
+
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(op1.type == OperandType::Immediate, "Cond Jmp: Operand has to be an 8/32 bit immediate.");
+
+            static_assert(op1.type != OperandType::None, "Cond Jmp: Unknown first operand type.");
+            static_assert(op1.size == OperandSize::DWord || op1.size == OperandSize::Byte, "Cond Jmp: Only Byte/DWord is allowed for the operand size.");
+
+
+            size_t sz = 2;
+
+            if constexpr (op1.size == OperandSize::DWord)
+                sz += 4;
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+
+
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            if constexpr (op1.size == OperandSize::DWord)
+                out[index++] = 0x0F;
+
+            out[index] = static_cast<uint8_t>(cond);
+
+            if constexpr (op1.size == OperandSize::DWord)
+                out[index] += 0x10;
+
+            index++;
+            if constexpr (op1.size == OperandSize::Byte)
+                ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op1_val));
+            else if constexpr (op1.size == OperandSize::DWord)
+                ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
+
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
+    };
+
     // ---- Fixed Size Instructions ----
     struct FixedSizeInstr {
         FixedInstrType opcode;
@@ -1274,9 +1429,13 @@ namespace blazing_asm {
             }();
 
 
-            for (size_t i = 0; i < bytes.size(); ++i)
-                code[offset + i] = bytes[i];
-            offset += bytes.size();
+            const size_t byte_count = bytes.size();
+            if (offset + byte_count <= code.size()) {
+                for (size_t i = 0; i < byte_count; ++i) {
+                    code[offset + i] = bytes[i];
+                }
+                offset += byte_count;
+            }
 
         };
 
@@ -1391,6 +1550,8 @@ namespace blazing_asm {
 
     constexpr MemProxy MEM {};
 
+    /* Global Instructions */
+
     template <typename T1, typename T2>
     constexpr auto MOV(T1 type1, T2 type2) {
         return MovInstr<T1, T2> { type1, type2 };
@@ -1401,11 +1562,14 @@ namespace blazing_asm {
         return LeaInstr<T1, T2> { type1, type2 };
     }
 
-    // Define Bytes
+    /* Define Bytes */
+
     template <typename... BytesT>
     constexpr auto DB(BytesT&&... bytes) {
         return ByteInstr<std::decay_t<BytesT>...>{std::forward<BytesT>(bytes)...};
     }
+
+    /* GRP1 */
 
     template <typename T1, typename T2>
     constexpr auto ADD(T1 type1, T2 type2) {
@@ -1449,7 +1613,7 @@ namespace blazing_asm {
     }
 
 
-
+    /* GRP2 */
 
     template <typename T1, typename T2>
     constexpr auto ROL(T1 type1, T2 type2) {
@@ -1532,6 +1696,48 @@ namespace blazing_asm {
     }
 
 
+    /* GRP3 */
+
+    template <typename T1>
+    constexpr auto NOT(T1 type1) {
+        return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_NOT };
+    }
+
+    template <typename T1>
+    constexpr auto NEG(T1 type1) {
+        return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_NEG };
+    }
+
+    template <typename T1>
+    constexpr auto MUL(T1 type1) {
+        return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_MUL };
+    }
+
+    template <typename T1>
+    constexpr auto IMUL(T1 type1) {
+        return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_IMUL };
+    }
+
+    template <typename T1>
+    constexpr auto DIV(T1 type1) {
+        return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_DIV };
+    }
+
+    template <typename T1>
+    constexpr auto IDIV(T1 type1) {
+        return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_IDIV };
+    }
+
+
+    /* Conditional Jumps */
+
+    template <typename T1>
+    constexpr auto JCC(Conditions cond, T1 type1) {
+        return CondJmpInstr<T1> { type1, cond };
+    }
+
+
+    /* Fixed Size */
 
     constexpr FixedSizeInstr RET() {
         return FixedSizeInstr { FixedInstrType::RET };
