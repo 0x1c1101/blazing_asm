@@ -44,7 +44,7 @@
 #include <array>
 #include <type_traits>
 
-namespace blazing_asm {
+namespace basm {
 
 
 #pragma region Definitions
@@ -294,7 +294,7 @@ namespace blazing_asm {
     }
 
 
-    template <typename OpSizeT = nulltype_t, typename BaseRegT = nulltype_t, typename IndexRegT = nulltype_t, typename DispSizeT = nulltype_t>
+    template <typename OpSizeT = nulltype_t, typename BaseRegT = nulltype_t, typename IndexRegT = nulltype_t, typename DispSizeT = nulltype_t, typename x86T = nulltype_t>
     struct Memory {
         static_assert(is_reg64<BaseRegT>() || is_reg32<BaseRegT>() || std::is_same_v<BaseRegT, nulltype_t>, "Invalid base register type");
         static_assert(is_reg64<IndexRegT>() || is_reg32<IndexRegT>() || std::is_same_v<IndexRegT, nulltype_t>, "Invalid index register type");
@@ -313,10 +313,13 @@ namespace blazing_asm {
         static_assert(!((std::is_same_v<BaseRegT, RegEIP> || std::is_same_v<BaseRegT, RegRIP>) && !std::is_same_v<IndexRegT, nulltype_t>), "Can't use relative with an index register.");
 
 
+        static_assert(std::is_same_v<x86T, nulltype_t> || (get_op_size<BaseRegT>() != OperandSize::QWord && get_op_size<IndexRegT>() != OperandSize::QWord), "Can't use 64 bit registers in x86 mode.");
+
         using BaseReg = BaseRegT;
         using IndexReg = IndexRegT;
         using OpSize = OpSizeT;
         using DispSize = DispSizeT;
+        using is32 = x86T;
 
 
         BaseRegT base;
@@ -408,6 +411,10 @@ namespace blazing_asm {
         if constexpr (is_specialization_of<RegType, Memory>::value) {
             using IndexRegT = typename RegType::IndexReg;
             using BaseRegT = typename RegType::BaseReg;
+            using is32 = typename RegType::is32;
+
+            if constexpr (std::is_same_v<is32, std::true_type>)
+                return false;
 
             if constexpr (is_reg_r<IndexRegT>() || is_reg_r<BaseRegT>())
                 return true;
@@ -420,6 +427,9 @@ namespace blazing_asm {
 
     template <typename RegDest, typename RegSrc>
     constexpr uint8_t op_calculate_rex() {
+        if constexpr (std::is_same_v<RegDest, nulltype_t> && is_reg_r<RegSrc>())
+            return 0x41;
+
 
         //if constexpr (!is_imm<RegSrc>() || get_op_size<RegDest>() != OperandSize::QWord || !is_specialization_of<RegDest, Memory>::value)
         if constexpr (get_op_size<RegDest>() != OperandSize::QWord && !op_requires_rex<RegDest>() && !op_requires_rex<RegSrc>())
@@ -528,9 +538,12 @@ namespace blazing_asm {
         using IndexRegT = typename MemoryT::IndexReg;
         using DispSizeT = typename MemoryT::DispSize;
 
+        using is32 = typename MemoryT::is32;
+
+
         sz++; // MODRM
 
-        if constexpr (is_reg32<BaseRegT>() || is_reg32<IndexRegT>())
+        if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
             sz++;
 
 
@@ -578,7 +591,12 @@ namespace blazing_asm {
 
 
         if constexpr (std::is_same_v<BaseRegT, RegRIP> || std::is_same_v<BaseRegT, RegEIP>) {
-            out[index++] = 0x5; // Relative
+
+            if constexpr (std::is_same_v<RegT, nulltype_t>)
+                out[index++] = 0x5;
+            else
+                out[index++] = ((reg & 0x7) << 3) | (0x5);
+
         }
         else if constexpr (require_sib<BaseRegT, IndexRegT>()) {
             if constexpr (std::is_same_v<BaseRegT, nulltype_t>) {
@@ -674,8 +692,9 @@ namespace blazing_asm {
 
             using IndexRegT = typename FirstType::IndexReg;
             using BaseRegT = typename FirstType::BaseReg;
+            using is32 = typename FirstType::is32;
 
-            if constexpr (is_reg32<BaseRegT>() || is_reg32<IndexRegT>())
+            if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                 out[index++] = 0x67;
         }
         else if constexpr (op2.type == OperandType::Memory) {
@@ -683,8 +702,9 @@ namespace blazing_asm {
 
             using IndexRegT = typename SecondType::IndexReg;
             using BaseRegT = typename SecondType::BaseReg;
+            using is32 = typename SecondType::is32;
 
-            if constexpr (is_reg32<BaseRegT>() || is_reg32<IndexRegT>())
+            if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                 out[index++] = 0x67;
         }
 
@@ -1362,6 +1382,120 @@ namespace blazing_asm {
         }
     };
 
+    // ---- Jump ----
+    template <typename FirstType, typename x86 = nulltype_t>
+    struct JmpInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        FirstType op1_val;
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "JMP: Can't use RIP/EIP");
+
+            static_assert(op1.type != OperandType::None, "JMP: Unknown first operand type");
+
+            static_assert(op1.size != OperandSize::None, "JMP: Unknown first operand size");
+            static_assert(op1.type == OperandType::Immediate || op1.size != OperandSize::Byte, "JMP: Only an immediate operand can be used as an 8-bit operand.");
+            static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "JMP: Can't use 64 bit immediate.");
+            static_assert(std::is_same_v<x86, std::true_type> || !(op1.type == OperandType::Register && op1.size == OperandSize::DWord), "JMP: Can't use 32 bit registers in x64 mode.");
+
+
+            size_t sz = 1;
+
+            if constexpr (op1.type == OperandType::Immediate) {
+                if constexpr (op1.size == OperandSize::Byte)
+                    sz++;
+                else
+                    sz += 4;
+            }
+            else {
+                constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+                if constexpr (rex != 0 && rex != 0x40)
+                    sz++;
+
+                if constexpr (op1.size == OperandSize::Word || (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord))
+                    sz++;
+
+                if constexpr (op1.type == OperandType::Memory)
+                    mem_calc_op_size<FirstType>(sz);
+                else if constexpr (op1.type == OperandType::Register)
+                    sz++;
+            }
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+
+
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            if constexpr (op1.type == OperandType::Immediate) {
+                if constexpr (op1.size == OperandSize::Byte)
+                {
+                    out[index++] = 0xEB;
+                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op1_val));
+                }
+                else
+                {
+                    out[index++] = 0xE9;
+                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
+                }
+
+                return out;
+            }
+
+            if constexpr (op1.type == OperandType::Memory) {
+
+                using IndexRegT = typename FirstType::IndexReg;
+                using BaseRegT = typename FirstType::BaseReg;
+                using is32 = typename FirstType::is32;
+
+
+                if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                    out[index++] = 0x67;
+            }
+
+            if constexpr (op1.size == OperandSize::Word || (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord))
+                out[index++] = 0x66;
+
+            constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+
+            if constexpr (rex != 0 && rex != 0x40)
+                out[index++] = rex;
+
+
+
+            out[index++] = 0xFF;
+
+            
+            if constexpr (op1.type == OperandType::Register)
+                out[index++] = 0xE0 | (op1_val & 0x7);
+            else if constexpr (op1.type == OperandType::Memory)
+            {
+                if constexpr (op1.size == OperandSize::DWord)
+                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b101));
+                else
+                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b100));
+            }
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
+    };
+
     // ---- Fixed Size Instructions ----
     struct FixedSizeInstr {
         FixedInstrType opcode;
@@ -1452,9 +1586,9 @@ namespace blazing_asm {
         const uint8_t scale;
         const DispSizeT disp;
 
-        template <typename Size>
+        template <typename Size, typename x86>
         constexpr auto build() {
-            return Memory<Size, BaseT, IndexT, DispSizeT> {base, index, scale, disp};
+            return Memory<Size, BaseT, IndexT, DispSizeT, x86> {base, index, scale, disp};
         }
     };
 
@@ -1522,24 +1656,27 @@ namespace blazing_asm {
     }
 
 
-    template <typename Size>
+    template <typename Size, typename x86 = nulltype_t>
     struct MemSizeProxy {
         template <typename B, typename I, typename D>
         constexpr auto operator[](MemoryBuilder<B, I, D> builder) const {
-            return builder.build<Size>();
+            return builder.build<Size, x86>();
         }
 
         template <typename BaseT>
         constexpr auto operator[](BaseT base) const {
 
             if constexpr (is_register<BaseT>())
-                return Memory<Size, BaseT>{base, {}, SCALING_NONE, {}};
+                return Memory<Size, BaseT, nulltype_t, nulltype_t, x86>{base, {}, SCALING_NONE, {}};
+            else if constexpr(std::is_same_v<x86, std::true_type>)
+                return Memory<Size, RegEIP, nulltype_t, BaseT, x86>{ EIP, {}, SCALING_NONE, base};
             else
-                return Memory<Size, nulltype_t, nulltype_t, BaseT>{{}, {}, SCALING_NONE, base};
+                return Memory<Size, nulltype_t, nulltype_t, BaseT, x86>{{}, {}, SCALING_NONE, base};
         }
 
 
     };
+
 
     struct MemProxy {
         static constexpr MemSizeProxy<uint8_t>  BYTE{};
@@ -1548,7 +1685,14 @@ namespace blazing_asm {
         static constexpr MemSizeProxy<uint64_t> QWORD{};
     };
 
+    struct Mem32Proxy {
+        static constexpr MemSizeProxy<uint8_t, std::true_type>  BYTE{};
+        static constexpr MemSizeProxy<uint16_t, std::true_type>  WORD{};
+        static constexpr MemSizeProxy<uint32_t, std::true_type> DWORD{};
+    };
+
     constexpr MemProxy MEM {};
+    constexpr Mem32Proxy MEM32 {};
 
     /* Global Instructions */
 
@@ -1735,7 +1879,19 @@ namespace blazing_asm {
     constexpr auto JCC(Conditions cond, T1 type1) {
         return CondJmpInstr<T1> { type1, cond };
     }
+    
+    
+    /* Jump */
 
+    template <typename T1>
+    constexpr auto JMP(T1 type1) {
+        return JmpInstr<T1> { type1 };
+    }
+
+    template <typename T1>
+    constexpr auto JMP32(T1 type1) {
+        return JmpInstr<T1, std::true_type> { type1 };
+    }
 
     /* Fixed Size */
 
