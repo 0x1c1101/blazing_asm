@@ -16,7 +16,7 @@ That being said, `BlazingASM` is intentionally minimal and focused; it doesn’t
 
 | **Category**              | **Instruction**                                        | **Description**                                                    |
 | ------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
-| **Data Movement**         | `MOV`                                                  | General-purpose register or memory moves                           |
+| **Data Movement**         | `MOV`                                                  | Register/Memory/Immediate moves                                    |
 |                           | `LEA`                                                  | Load effective address                                             |
 |                           | `DB(...)`                                              | Define raw byte(s) (data injection)                                |
 | **Arithmetic (GRP1)**     | `ADD`, `OR`, `ADC`, `SBB`, `AND`, `SUB`, `XOR`, `CMP`  | Basic arithmetic and bitwise operations                            |
