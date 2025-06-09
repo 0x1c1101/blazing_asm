@@ -303,20 +303,31 @@ namespace basm {
         static_assert(is_reg64<IndexRegT>() || is_reg32<IndexRegT>() || std::is_same_v<IndexRegT, nulltype_t>, "Invalid index register type");
 
 
-        static_assert(get_op_size<BaseRegT>() == get_op_size<IndexRegT>() || std::is_same_v<BaseRegT, nulltype_t> || std::is_same_v<IndexRegT, nulltype_t>, "Invalid base/index expression");
+        static_assert(
+            get_op_size<BaseRegT>() == get_op_size<IndexRegT>() || std::is_same_v<BaseRegT, nulltype_t> || std::is_same_v<IndexRegT, nulltype_t>
+            , "Invalid base/index expression");
 
         static_assert(!std::is_same_v<OpSizeT, nulltype_t>, "Invalid operand size");
-        static_assert((is_imm<DispSizeT>() && (get_op_size<DispSizeT>() == OperandSize::Byte || get_op_size<DispSizeT>() == OperandSize::DWord)) || std::is_same_v<DispSizeT, nulltype_t>, "Invalid displacement size");
+        static_assert(
+            (is_imm<DispSizeT>() && (get_op_size<DispSizeT>() == OperandSize::Byte || get_op_size<DispSizeT>() == OperandSize::DWord)) ||
+            std::is_same_v<DispSizeT, nulltype_t>
+            , "Invalid displacement size");
 
 
-        static_assert(!std::is_same_v<IndexRegT, RegRSP>, "RSP can't be an index register.");
-        static_assert(!std::is_same_v<IndexRegT, RegESP>, "ESP can't be an index register.");
-        static_assert(!std::is_same_v<IndexRegT, RegRIP>, "RIP can't be an index register.");
-        static_assert(!std::is_same_v<IndexRegT, RegEIP>, "EIP can't be an index register.");
-        static_assert(!((std::is_same_v<BaseRegT, RegEIP> || std::is_same_v<BaseRegT, RegRIP>) && !std::is_same_v<IndexRegT, nulltype_t>), "Can't use relative with an index register.");
+        static_assert(
+            !std::is_same_v<IndexRegT, RegRSP> &&
+            !std::is_same_v<IndexRegT, RegESP> &&
+            !std::is_same_v<IndexRegT, RegRIP> &&
+            !std::is_same_v<IndexRegT, RegEIP>
+            , "RSP/ESP/RIP/EIP can't be an index register.");
 
+        static_assert(
+            !((std::is_same_v<BaseRegT, RegEIP> || std::is_same_v<BaseRegT, RegRIP>) && !std::is_same_v<IndexRegT, nulltype_t>)
+            , "Can't use relative with an index register.");
 
-        static_assert(std::is_same_v<x86T, nulltype_t> || (get_op_size<BaseRegT>() != OperandSize::QWord && get_op_size<IndexRegT>() != OperandSize::QWord), "Can't use 64 bit registers in x86 mode.");
+        static_assert(
+            std::is_same_v<x86T, nulltype_t> || (get_op_size<BaseRegT>() != OperandSize::QWord && get_op_size<IndexRegT>() != OperandSize::QWord)
+            , "Can't use 64 bit registers in x86 mode.");
 
         using BaseReg = BaseRegT;
         using IndexReg = IndexRegT;
@@ -327,11 +338,8 @@ namespace basm {
 
         BaseRegT base;
         IndexRegT index;
-
         uint8_t scale = SCALING_NONE;
         DispSizeT disp;
-
-       
     };
 
     template <typename Type>
@@ -394,23 +402,19 @@ namespace basm {
 
     template <typename Type>
     constexpr OperandType get_op_type() {
+
         if constexpr (is_imm<Type>())
-        {
             return OperandType::Immediate;
-        }
-        if constexpr (is_register<Type>()) {
+        if constexpr (is_register<Type>())
             return OperandType::Register;
-        }
         if constexpr (is_specialization_of<Type, Memory>::value)
-        {
             return OperandType::Memory;
-        }
+
         return OperandType::None;
     }
 
     template <typename RegType>
     constexpr bool op_requires_rex() {
-
         if constexpr (is_specialization_of<RegType, Memory>::value) {
             using IndexRegT = typename RegType::IndexReg;
             using BaseRegT = typename RegType::BaseReg;
@@ -592,7 +596,6 @@ namespace basm {
 
         constexpr uint8_t mod = mem_get_mod<BaseRegT, IndexRegT, DispSizeT>();
 
-
         if constexpr (std::is_same_v<BaseRegT, RegRIP> || std::is_same_v<BaseRegT, RegEIP>) {
 
             if constexpr (std::is_same_v<RegT, nulltype_t>)
@@ -720,8 +723,6 @@ namespace basm {
             out[index++] = rex;
 
         
-
-
     }
 
 #pragma region Instructions
@@ -732,15 +733,10 @@ namespace basm {
         static constexpr OperandHelper<FirstType> op1;
         static constexpr OperandHelper<SecondType> op2;
 
-        
-
         FirstType op1_val;
         SecondType op2_val;
 
-
         static constexpr size_t calc_array_size() {
-
-            
 
             static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "MOV: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate, "MOV: First operand can't be an Immediate");
@@ -766,7 +762,6 @@ namespace basm {
 
             if constexpr (op_calculate_rex<FirstType, SecondType>() != 0)
                 sz++;
-
             if constexpr (op1.size == OperandSize::Word || (!is_imm<SecondType>() && op2.size == OperandSize::Word))
                 sz++;
 
@@ -793,7 +788,6 @@ namespace basm {
 
         static constexpr size_t size = calc_array_size();
 
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -801,8 +795,6 @@ namespace basm {
             handle_prefix<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
 
             if constexpr (op1.type == OperandType::Register) {
-
-                
 
                 if constexpr (op2.type == OperandType::Immediate) {
                     if constexpr (op1.size == OperandSize::QWord && op2.size < OperandSize::QWord)
@@ -840,8 +832,6 @@ namespace basm {
                     index++;
 
                     out[index++] = (0b11 << 6) | (op2_val & 0x7) << 3 | (op1_val & 0x7);
-                    
-
                 }
                 else if constexpr (op2.type == OperandType::Memory) {
                     out[index] = 0x8A;
@@ -852,40 +842,41 @@ namespace basm {
 
                     mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
                 }
+                return out;
             }
-            else if constexpr (op1.type == OperandType::Memory) {
 
-                if constexpr (op2.type == OperandType::Immediate) {
+            // else if constexpr (op1.type == OperandType::Memory)
 
-                    out[index] = 0xC6;
+            if constexpr (op2.type == OperandType::Immediate) {
 
-                    if constexpr (op1.size != OperandSize::Byte)
-                        out[index] += 0x1;
+                out[index] = 0xC6;
 
-                    index++;
+                if constexpr (op1.size != OperandSize::Byte)
+                    out[index] += 0x1;
 
-                    mem_handle_op<FirstType, nulltype_t>(out.data(), index, op1_val, {});
+                index++;
 
-                    if constexpr (op2.size == OperandSize::Byte)
-                        ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
-                    else if constexpr (op2.size == OperandSize::Word)
-                        ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
-                    else if constexpr (op2.size == OperandSize::DWord)
-                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
+                mem_handle_op<FirstType, nulltype_t>(out.data(), index, op1_val, {});
 
-                }
-                else {
-                    out[index] = 0x88;
+                if constexpr (op2.size == OperandSize::Byte)
+                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+                else if constexpr (op2.size == OperandSize::Word)
+                    ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
+                else if constexpr (op2.size == OperandSize::DWord)
+                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
 
-                    if constexpr (op1.size != OperandSize::Byte)
-                        out[index] += 0x1;
-                
-                    index++;
-
-                    mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
-                }
-                
+                return out;
             }
+
+            out[index] = 0x88;
+
+            if constexpr (op1.size != OperandSize::Byte)
+                out[index] += 0x1;
+
+            index++;
+
+            mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+
             return out;
         }
 
@@ -907,10 +898,8 @@ namespace basm {
         static constexpr OperandHelper<FirstType> op1;
         static constexpr OperandHelper<SecondType> op2;
 
-
         FirstType op1_val;
         SecondType op2_val;
-
 
         static constexpr size_t calc_array_size() {
             static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "LEA: Can't use RIP/EIP");
@@ -929,7 +918,6 @@ namespace basm {
 
             // lea reg, mem
 
-
             size_t sz = 1;
 
             if constexpr (op_calculate_rex<FirstType, SecondType>() != 0)
@@ -941,17 +929,12 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
-
             out[index++] = 0x8D;
-
-
             mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
 
             return out;
@@ -961,8 +944,6 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
@@ -996,7 +977,6 @@ namespace basm {
             static_assert(!(op2.type == OperandType::Immediate && op1.size < op2.size), "ARITH: Immediate is higher than the register");
             static_assert(!(op2.type == OperandType::Immediate && op2.size == OperandSize::QWord), "ARITH: Can't use 64 bit immediate.");
             //static_assert(op1.size == OperandSize::QWord && op2.size == OperandSize::DWord || !(op1.type == OperandType::Memory && op2.type == OperandType::Immediate && op1.size != op2.size), "ARITH: Memory operand size mismatch.");
-
 
             size_t sz = 1;
 
@@ -1035,13 +1015,11 @@ namespace basm {
             else if constexpr (op2.type == OperandType::Memory)
                 mem_calc_op_size<SecondType>(sz);
 
-
             return sz;
         }
 
+
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -1104,46 +1082,47 @@ namespace basm {
 
                     mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
                 }
+
+                return out;
             }
-            else if constexpr (op1.type == OperandType::Memory) {
+            
+            // OP1 Memory operand
 
-                if constexpr (op2.type == OperandType::Immediate) {
+            if constexpr (op2.type == OperandType::Immediate) {
 
-                    out[index] = 0x80;
+                out[index] = 0x80;
 
-                    if constexpr (op1.size != OperandSize::Byte)
-                    {
-                        out[index] += 0x1;
-                        if constexpr (op2.size == OperandSize::Byte)
-                            out[index] += 0x2;
-                    }
-
-                    
-
-                    index++;
-
-                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
-
+                if constexpr (op1.size != OperandSize::Byte)
+                {
+                    out[index] += 0x1;
                     if constexpr (op2.size == OperandSize::Byte)
-                        ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
-                    else if constexpr (op2.size == OperandSize::DWord || (op1.size != OperandSize::Word && op2.size == OperandSize::Word))
-                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
-                    else if constexpr (op2.size == OperandSize::Word)
-                        ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
-
-                }
-                else {
-                    out[index] = 0x00 | (op_ext << 3);
-
-                    if constexpr (op1.size != OperandSize::Byte)
-                        out[index] += 0x1;
-
-                    index++;
-
-                    mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+                        out[index] += 0x2;
                 }
 
+
+
+                index++;
+
+                mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
+
+                if constexpr (op2.size == OperandSize::Byte)
+                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+                else if constexpr (op2.size == OperandSize::DWord || (op1.size != OperandSize::Word && op2.size == OperandSize::Word))
+                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
+                else if constexpr (op2.size == OperandSize::Word)
+                    ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
+
+                return out;
             }
+
+            out[index] = 0x00 | (op_ext << 3);
+
+            if constexpr (op1.size != OperandSize::Byte)
+                out[index] += 0x1;
+
+            index++;
+
+            mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
             return out;
         }
 
@@ -1182,9 +1161,11 @@ namespace basm {
             static_assert(std::is_same_v<SecondType, std::true_type> || op2.size != OperandSize::None, "Shift/Rotate: Unknown second operand size");
             
 
-            static_assert(std::is_same_v<SecondType, RegCL> ||
+            static_assert(
+                std::is_same_v<SecondType, RegCL> ||
                 std::is_same_v<SecondType, std::true_type> ||
-                (op2.type == OperandType::Immediate && op2.size == OperandSize::Byte), "Shift/Rotate: Invalid source operand");
+                (op2.type == OperandType::Immediate && op2.size == OperandSize::Byte)
+                , "Shift/Rotate: Invalid source operand");
 
 
             size_t sz = 1;
@@ -1204,13 +1185,10 @@ namespace basm {
                 sz++;
             
             
-
             return sz;
         }
 
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -1245,8 +1223,6 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
@@ -1270,7 +1246,6 @@ namespace basm {
 
             static_assert(op1.size != OperandSize::None, "Unary Arith: Unknown first operand size");
 
-
             size_t sz = 1;
 
             if constexpr (op_calculate_rex<FirstType, nulltype_t>() != 0)
@@ -1288,8 +1263,6 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -1316,8 +1289,6 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
@@ -1339,7 +1310,6 @@ namespace basm {
             static_assert(op1.type != OperandType::None, "Cond Jmp: Unknown first operand type.");
             static_assert(op1.size == OperandSize::DWord || op1.size == OperandSize::Byte, "Cond Jmp: Only Byte/DWord is allowed for the operand size.");
 
-
             size_t sz = 2;
 
             if constexpr (op1.size == OperandSize::DWord)
@@ -1349,8 +1319,6 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -1369,7 +1337,6 @@ namespace basm {
             else if constexpr (op1.size == OperandSize::DWord)
                 ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
 
-
             return out;
         }
 
@@ -1377,8 +1344,6 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
@@ -1392,7 +1357,6 @@ namespace basm {
         FirstType op1_val;
         uint8_t op_ext;
 
-
         static constexpr size_t calc_array_size() {
 
             static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "JMP/CALL: Can't use RIP/EIP");
@@ -1404,7 +1368,6 @@ namespace basm {
             static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "JMP/CALL: Can't use 64 bit immediate.");
             static_assert(std::is_same_v<x86, std::true_type> || !(op1.type == OperandType::Register && op1.size == OperandSize::DWord), "JMP/CALL: Can't use 32 bit registers in x64 mode.");
             static_assert(!std::is_same_v<x86, std::true_type> || op1.size != OperandSize::QWord, "JMP/CALL: Can't use 64 bit registers in x86 mode.");
-
 
             size_t sz = 1;
 
@@ -1432,8 +1395,6 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -1476,10 +1437,7 @@ namespace basm {
             if constexpr (rex != 0 && rex != 0x40)
                 out[index++] = rex;
 
-
-
             out[index++] = 0xFF;
-
 
             if constexpr (op1.type == OperandType::Register)
                 out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
@@ -1498,8 +1456,6 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
@@ -1511,7 +1467,6 @@ namespace basm {
     struct PushInstr {
         static constexpr OperandHelper<FirstType> op1;
         FirstType op1_val;
-
 
         static constexpr size_t calc_array_size() {
 
@@ -1551,8 +1506,6 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-
-
         constexpr std::array<uint8_t, size> encode_header() const {
             std::array<uint8_t, size> out = {};
             size_t index = 0;
@@ -1592,8 +1545,6 @@ namespace basm {
                 out[index++] = rex;
 
 
-
-
             if constexpr (op1.type == OperandType::Register)
                 out[index++] = 0x50 | (op1_val & 0x7);
             else if constexpr (op1.type == OperandType::Memory)
@@ -1610,13 +1561,89 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
     };
+
+
+    // ---- Pop ----
+    template <typename FirstType, typename x86 = nulltype_t>
+    struct PopInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        FirstType op1_val;
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "POP: Can't use RIP/EIP");
+            static_assert(op1.type != OperandType::None, "POP: Unknown first operand type");
+            static_assert(op1.size != OperandSize::None, "POP: Unknown first operand size");
+            static_assert(op1.type != OperandType::Immediate, "POP: Can't use an immediate operand.");
+
+            static_assert(op1.type == OperandType::Immediate || std::is_same_v<x86, std::true_type> || op1.size != OperandSize::DWord, "POP: Can't use 32 bit operands in x64 mode.");
+            static_assert(!std::is_same_v<x86, std::true_type> || op1.size != OperandSize::QWord, "POP: Can't use 64 bit registers in x86 mode.");
+
+
+            size_t sz = 1;
+            constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+            if constexpr (rex != 0 && rex != 0x40)
+                sz++;
+            if constexpr (op1.size == OperandSize::Word)
+                sz++;
+            if constexpr (op1.type == OperandType::Memory)
+                mem_calc_op_size<FirstType>(sz);
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            if constexpr (op1.type == OperandType::Memory) {
+
+                using IndexRegT = typename FirstType::IndexReg;
+                using BaseRegT = typename FirstType::BaseReg;
+                using is32 = typename FirstType::is32;
+
+
+                if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                    out[index++] = 0x67;
+            }
+
+            if constexpr (op1.size == OperandSize::Word)
+                out[index++] = 0x66;
+
+            constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+
+            if constexpr (rex != 0 && rex != 0x40)
+                out[index++] = rex;
+
+
+            if constexpr (op1.type == OperandType::Register)
+                out[index++] = 0x58 | (op1_val & 0x7);
+            else if constexpr (op1.type == OperandType::Memory)
+            {
+                out[index++] = 0x8F;
+
+                mem_handle_op<FirstType, nulltype_t>(out.data(), index, op1_val, {});
+            }
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
+    };
+
 
     // ---- Fixed Size Instructions ----
     struct FixedSizeInstr {
@@ -1626,7 +1653,6 @@ namespace basm {
             return { static_cast<uint8_t>(opcode) };
         }
     };
-
 
 
     // ---- Append Bytes ----
@@ -1642,7 +1668,6 @@ namespace basm {
             return bytes_array;
         }
     };
-
 
 
 #pragma endregion Instructions
@@ -1710,7 +1735,7 @@ namespace basm {
 
         template <typename Size, typename x86>
         constexpr auto build() {
-            return Memory<Size, BaseT, IndexT, DispSizeT, x86> {base, index, scale, disp};
+            return Memory<Size, BaseT, IndexT, DispSizeT, x86> { base, index, scale, disp };
         }
     };
 
@@ -1795,7 +1820,6 @@ namespace basm {
             else
                 return Memory<Size, nulltype_t, nulltype_t, BaseT, x86>{{}, {}, SCALING_NONE, base};
         }
-
 
     };
 
@@ -2027,7 +2051,6 @@ namespace basm {
 
     /* Push & Pop */
 
-
     template <typename T1>
     constexpr auto PUSH(T1 type1) {
         return PushInstr<T1> { type1 };
@@ -2036,6 +2059,16 @@ namespace basm {
     template <typename T1>
     constexpr auto PUSH32(T1 type1) {
         return PushInstr<T1, std::true_type> { type1 };
+    }
+
+    template <typename T1>
+    constexpr auto POP(T1 type1) {
+        return PopInstr<T1> { type1 };
+    }
+
+    template <typename T1>
+    constexpr auto POP32(T1 type1) {
+        return PopInstr<T1, std::true_type> { type1 };
     }
 
     /* Fixed Size */
