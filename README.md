@@ -31,8 +31,7 @@ That being said, `BlazingASM` is intentionally minimal and focused; it doesn’t
 |                           | `POPF`, `PUSHF`                                        | Push/pop flags                                                     |
 | **Fixed Instructions**    | `RET`                                                  | Return from procedure                                              |
 |                           | `NOP`                                                  | No operation                                                       |
-| **Planned / Coming Soon** | `LABEL`                                                | 🚧 Label support for branching (not yet implemented)               |
-|                           | `FPU ops`                                              | 🚧 Floating-point instructions (`FLD`, `FSTP`, etc.) planned       |
+| **Planned**               | `Labels`, `FPU Ops`, `TEST`, `INC/DEC`                 | 🚧 Coming Soon...                                                 |
 
 ## Setting it up
 
