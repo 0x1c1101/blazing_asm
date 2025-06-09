@@ -4,7 +4,7 @@
 
 [![Discord](https://img.shields.io/badge/chat-on%20Discord-green.svg)](https://discord.gg/GdYanwSCwm)
 
-A simple and lightweight assembler library that supports the majority of significant instructions from the Intel x86-64 architecture. Mainly beneficial for shellcode development and runtime bytecode generation. Due to its design, it can generate the byte code quite fast while allowing you to generate and use random registers/immediates at runtime.
+A simple and lightweight assembler library that supports the majority of significant instructions from the Intel x86-64 architecture. Mainly beneficial for shellcode development and runtime bytecode generation. Due to its design, it can produce the machine code quite fast while allowing you to generate and use random registers/immediates at runtime.
 
 ## Why not use AsmJit?
 
@@ -36,7 +36,7 @@ That being said, `BlazingASM` is intentionally minimal and focused; it doesn’t
 
 ## Setting it up
 
-All you need to do is download the `blazing_asm.hpp` header file, paste it into your project folder, and type this in your source code:
+All you need to do is download the `blazing_asm.hpp` header file, paste it into your project folder, and add this in your source code:
 
 ```cpp
 #include "blazing_asm.hpp"
