@@ -842,40 +842,41 @@ namespace basm {
 
                     mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
                 }
-                return out;
+
             }
+            else {
+                // (op1.type == OperandType::Memory)
 
-            // else if constexpr (op1.type == OperandType::Memory)
+                if constexpr (op2.type == OperandType::Immediate) {
 
-            if constexpr (op2.type == OperandType::Immediate) {
+                    out[index] = 0xC6;
 
-                out[index] = 0xC6;
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index] += 0x1;
 
-                if constexpr (op1.size != OperandSize::Byte)
-                    out[index] += 0x1;
+                    index++;
 
-                index++;
+                    mem_handle_op<FirstType, nulltype_t>(out.data(), index, op1_val, {});
 
-                mem_handle_op<FirstType, nulltype_t>(out.data(), index, op1_val, {});
+                    if constexpr (op2.size == OperandSize::Byte)
+                        ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+                    else if constexpr (op2.size == OperandSize::Word)
+                        ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
+                    else if constexpr (op2.size == OperandSize::DWord)
+                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
 
-                if constexpr (op2.size == OperandSize::Byte)
-                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
-                else if constexpr (op2.size == OperandSize::Word)
-                    ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
-                else if constexpr (op2.size == OperandSize::DWord)
-                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
+                }
+                else {
+                    out[index] = 0x88;
 
-                return out;
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index] += 0x1;
+
+                    index++;
+
+                    mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+                }
             }
-
-            out[index] = 0x88;
-
-            if constexpr (op1.size != OperandSize::Byte)
-                out[index] += 0x1;
-
-            index++;
-
-            mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
 
             return out;
         }
@@ -1083,46 +1084,47 @@ namespace basm {
                     mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
                 }
 
-                return out;
             }
-            
-            // OP1 Memory operand
+            else {
+                // OP1 Memory operand
 
-            if constexpr (op2.type == OperandType::Immediate) {
+                if constexpr (op2.type == OperandType::Immediate) {
 
-                out[index] = 0x80;
+                    out[index] = 0x80;
 
-                if constexpr (op1.size != OperandSize::Byte)
-                {
-                    out[index] += 0x1;
+                    if constexpr (op1.size != OperandSize::Byte)
+                    {
+                        out[index] += 0x1;
+                        if constexpr (op2.size == OperandSize::Byte)
+                            out[index] += 0x2;
+                    }
+
+                    index++;
+
+                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
+
                     if constexpr (op2.size == OperandSize::Byte)
-                        out[index] += 0x2;
+                        ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+                    else if constexpr (op2.size == OperandSize::DWord || (op1.size != OperandSize::Word && op2.size == OperandSize::Word))
+                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
+                    else if constexpr (op2.size == OperandSize::Word)
+                        ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
+
+                    return out;
+                }
+                else {
+                    out[index] = 0x00 | (op_ext << 3);
+
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index] += 0x1;
+
+                    index++;
+
+                    mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
                 }
 
 
-
-                index++;
-
-                mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
-
-                if constexpr (op2.size == OperandSize::Byte)
-                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
-                else if constexpr (op2.size == OperandSize::DWord || (op1.size != OperandSize::Word && op2.size == OperandSize::Word))
-                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
-                else if constexpr (op2.size == OperandSize::Word)
-                    ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
-
-                return out;
             }
-
-            out[index] = 0x00 | (op_ext << 3);
-
-            if constexpr (op1.size != OperandSize::Byte)
-                out[index] += 0x1;
-
-            index++;
-
-            mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
             return out;
         }
 
@@ -1130,8 +1132,6 @@ namespace basm {
             auto header = encode_header();
             return header;
         }
-
-
         constexpr std::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
@@ -1400,6 +1400,7 @@ namespace basm {
             size_t index = 0;
 
             if constexpr (op1.type == OperandType::Immediate) {
+
                 if constexpr (std::is_same_v<AllowShort, std::true_type> && op1.size == OperandSize::Byte)
                 {
                     out[index++] = 0xEB;
@@ -1415,38 +1416,40 @@ namespace basm {
                     ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
                 }
 
-                return out;
             }
+            else {
 
-            if constexpr (op1.type == OperandType::Memory) {
+                if constexpr (op1.type == OperandType::Memory) {
 
-                using IndexRegT = typename FirstType::IndexReg;
-                using BaseRegT = typename FirstType::BaseReg;
-                using is32 = typename FirstType::is32;
+                    using IndexRegT = typename FirstType::IndexReg;
+                    using BaseRegT = typename FirstType::BaseReg;
+                    using is32 = typename FirstType::is32;
+
+                    if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                        out[index++] = 0x67;
+                }
+
+                if constexpr (op1.size == OperandSize::Word || (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord))
+                    out[index++] = 0x66;
+
+                constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+
+                if constexpr (rex != 0 && rex != 0x40)
+                    out[index++] = rex;
+
+                out[index++] = 0xFF;
+
+                if constexpr (op1.type == OperandType::Register)
+                    out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
+                else if constexpr (op1.type == OperandType::Memory)
+                {
+                    if constexpr (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord)
+                        mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(op_ext + 1));
+                    else
+                        mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
+                }
 
 
-                if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
-                    out[index++] = 0x67;
-            }
-
-            if constexpr (op1.size == OperandSize::Word || (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord))
-                out[index++] = 0x66;
-
-            constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
-
-            if constexpr (rex != 0 && rex != 0x40)
-                out[index++] = rex;
-
-            out[index++] = 0xFF;
-
-            if constexpr (op1.type == OperandType::Register)
-                out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
-            else if constexpr (op1.type == OperandType::Memory)
-            {
-                if constexpr (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord)
-                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(op_ext + 1));
-                else
-                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
             }
 
             return out;
@@ -1522,37 +1525,40 @@ namespace basm {
                     ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
                 }
 
-                return out;
             }
+            else {
 
-            if constexpr (op1.type == OperandType::Memory) {
+                if constexpr (op1.type == OperandType::Memory) {
 
-                using IndexRegT = typename FirstType::IndexReg;
-                using BaseRegT = typename FirstType::BaseReg;
-                using is32 = typename FirstType::is32;
+                    using IndexRegT = typename FirstType::IndexReg;
+                    using BaseRegT = typename FirstType::BaseReg;
+                    using is32 = typename FirstType::is32;
 
 
-                if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
-                    out[index++] = 0x67;
+                    if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                        out[index++] = 0x67;
+                }
+
+                if constexpr (op1.size == OperandSize::Word)
+                    out[index++] = 0x66;
+
+                constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+
+                if constexpr (rex != 0 && rex != 0x40)
+                    out[index++] = rex;
+
+
+                if constexpr (op1.type == OperandType::Register)
+                    out[index++] = 0x50 | (op1_val & 0x7);
+                else if constexpr (op1.type == OperandType::Memory)
+                {
+                    out[index++] = 0xFF;
+
+                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b110));
+                }
+
             }
-
-            if constexpr (op1.size == OperandSize::Word)
-                out[index++] = 0x66;
-
-            constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
-
-            if constexpr (rex != 0 && rex != 0x40)
-                out[index++] = rex;
-
-
-            if constexpr (op1.type == OperandType::Register)
-                out[index++] = 0x50 | (op1_val & 0x7);
-            else if constexpr (op1.type == OperandType::Memory)
-            {
-                out[index++] = 0xFF;
-
-                mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b110));
-            }
+            
 
             return out;
         }
@@ -1701,12 +1707,11 @@ namespace basm {
         auto emit = [&](auto&& instr) constexpr {
 
             const auto bytes = [&] {
-                if constexpr (requires { std::declval<std::remove_reference_t<decltype(instr)>>().encode_constexpr(); }) {
+                if constexpr (requires { std::declval<std::remove_reference_t<decltype(instr)>>().encode_constexpr(); })
                     return instr.encode_constexpr();
-                }
-                else {
+                else
                     return instr.encode();
-                }
+
             }();
 
 
