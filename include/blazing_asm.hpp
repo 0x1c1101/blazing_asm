@@ -82,6 +82,9 @@ namespace basm {
         OP_DIV = 0b110,  // Unsigned divide
         OP_IDIV = 0b111,  // Signed divide
         
+
+        OP_JMP = 0b100,
+        OP_CALL = 0b010,
     };
 
     enum class FixedInstrType : uint8_t {
@@ -1382,28 +1385,31 @@ namespace basm {
         }
     };
 
-    // ---- Jump ----
-    template <typename FirstType, typename x86 = nulltype_t>
+    // ---- Jump/Call ----
+    template <typename FirstType, typename x86 = nulltype_t, typename AllowShort = nulltype_t>
     struct JmpInstr {
         static constexpr OperandHelper<FirstType> op1;
         FirstType op1_val;
+        uint8_t op_ext;
+
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "JMP: Can't use RIP/EIP");
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "JMP/CALL: Can't use RIP/EIP");
 
-            static_assert(op1.type != OperandType::None, "JMP: Unknown first operand type");
+            static_assert(op1.type != OperandType::None, "JMP/CALL: Unknown first operand type");
 
-            static_assert(op1.size != OperandSize::None, "JMP: Unknown first operand size");
-            static_assert(op1.type == OperandType::Immediate || op1.size != OperandSize::Byte, "JMP: Only an immediate operand can be used as an 8-bit operand.");
-            static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "JMP: Can't use 64 bit immediate.");
-            static_assert(std::is_same_v<x86, std::true_type> || !(op1.type == OperandType::Register && op1.size == OperandSize::DWord), "JMP: Can't use 32 bit registers in x64 mode.");
+            static_assert(op1.size != OperandSize::None, "JMP/CALL: Unknown first operand size");
+            static_assert(op1.type == OperandType::Immediate || op1.size != OperandSize::Byte, "JMP/CALL: Only an immediate operand can be used as an 8-bit operand.");
+            static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "JMP/CALL: Can't use 64 bit immediate.");
+            static_assert(std::is_same_v<x86, std::true_type> || !(op1.type == OperandType::Register && op1.size == OperandSize::DWord), "JMP/CALL: Can't use 32 bit registers in x64 mode.");
+            static_assert(!std::is_same_v<x86, std::true_type> || op1.size != OperandSize::QWord, "JMP/CALL: Can't use 64 bit registers in x86 mode.");
 
 
             size_t sz = 1;
 
             if constexpr (op1.type == OperandType::Immediate) {
-                if constexpr (op1.size == OperandSize::Byte)
+                if constexpr (std::is_same_v<AllowShort, std::true_type> && op1.size == OperandSize::Byte)
                     sz++;
                 else
                     sz += 4;
@@ -1433,14 +1439,18 @@ namespace basm {
             size_t index = 0;
 
             if constexpr (op1.type == OperandType::Immediate) {
-                if constexpr (op1.size == OperandSize::Byte)
+                if constexpr (std::is_same_v<AllowShort, std::true_type> && op1.size == OperandSize::Byte)
                 {
                     out[index++] = 0xEB;
                     ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op1_val));
                 }
                 else
                 {
-                    out[index++] = 0xE9;
+                    if constexpr (std::is_same_v<AllowShort, std::true_type>)
+                        out[index++] = 0xE9;
+                    else
+                        out[index++] = 0xE8;
+
                     ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
                 }
 
@@ -1470,15 +1480,127 @@ namespace basm {
 
             out[index++] = 0xFF;
 
-            
+
             if constexpr (op1.type == OperandType::Register)
-                out[index++] = 0xE0 | (op1_val & 0x7);
+                out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
             else if constexpr (op1.type == OperandType::Memory)
             {
-                if constexpr (op1.size == OperandSize::DWord)
-                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b101));
+                if constexpr (!std::is_same_v<x86, std::true_type> && op1.size == OperandSize::DWord)
+                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(op_ext + 1));
                 else
-                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b100));
+                    mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
+            }
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
+    };
+
+    // ---- Push ----
+    template <typename FirstType, typename x86 = nulltype_t>
+    struct PushInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        FirstType op1_val;
+
+
+        static constexpr size_t calc_array_size() {
+
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP>, "PUSH: Can't use RIP/EIP");
+
+            static_assert(op1.type != OperandType::None, "PUSH: Unknown first operand type");
+
+            static_assert(op1.size != OperandSize::None, "PUSH: Unknown first operand size");
+            static_assert(op1.type == OperandType::Immediate || op1.size != OperandSize::Byte, "PUSH: Only an immediate operand can be used as an 8-bit operand.");
+            static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "PUSH: Can't use 64 bit immediate.");
+            static_assert(op1.type == OperandType::Immediate || std::is_same_v<x86, std::true_type> || op1.size != OperandSize::DWord, "PUSH: Can't use 32 bit operands in x64 mode.");
+            static_assert(!std::is_same_v<x86, std::true_type> || op1.size != OperandSize::QWord, "PUSH: Can't use 64 bit registers in x86 mode.");
+
+
+            size_t sz = 1;
+
+            if constexpr (op1.type == OperandType::Immediate) {
+                if constexpr (op1.size == OperandSize::Byte)
+                    sz++;
+                else
+                    sz += 4;
+            }
+            else {
+                constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+                if constexpr (rex != 0 && rex != 0x40)
+                    sz++;
+
+                if constexpr (op1.size == OperandSize::Word)
+                    sz++;
+
+                if constexpr (op1.type == OperandType::Memory)
+                    mem_calc_op_size<FirstType>(sz);
+
+            }
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+
+
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            if constexpr (op1.type == OperandType::Immediate) {
+                if constexpr (op1.size == OperandSize::Byte)
+                {
+                    out[index++] = 0x6A;
+                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op1_val));
+                }
+                else
+                {
+                    out[index++] = 0x68;
+                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op1_val));
+                }
+
+                return out;
+            }
+
+            if constexpr (op1.type == OperandType::Memory) {
+
+                using IndexRegT = typename FirstType::IndexReg;
+                using BaseRegT = typename FirstType::BaseReg;
+                using is32 = typename FirstType::is32;
+
+
+                if constexpr (!std::is_same_v<is32, std::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                    out[index++] = 0x67;
+            }
+
+            if constexpr (op1.size == OperandSize::Word)
+                out[index++] = 0x66;
+
+            constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
+
+            if constexpr (rex != 0 && rex != 0x40)
+                out[index++] = rex;
+
+
+
+
+            if constexpr (op1.type == OperandType::Register)
+                out[index++] = 0x50 | (op1_val & 0x7);
+            else if constexpr (op1.type == OperandType::Memory)
+            {
+                out[index++] = 0xFF;
+
+                mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(0b110));
             }
 
             return out;
@@ -1881,16 +2003,39 @@ namespace basm {
     }
     
     
-    /* Jump */
+    /* Jump & Call */
 
     template <typename T1>
     constexpr auto JMP(T1 type1) {
-        return JmpInstr<T1> { type1 };
+        return JmpInstr<T1, nulltype_t, std::true_type> { type1, OP_EXTENSION::OP_JMP };
     }
 
     template <typename T1>
     constexpr auto JMP32(T1 type1) {
-        return JmpInstr<T1, std::true_type> { type1 };
+        return JmpInstr<T1, std::true_type, std::true_type> { type1, OP_EXTENSION::OP_JMP };
+    }
+
+    template <typename T1>
+    constexpr auto CALL(T1 type1) {
+        return JmpInstr<T1> { type1, OP_EXTENSION::OP_CALL };
+    }
+
+    template <typename T1>
+    constexpr auto CALL32(T1 type1) {
+        return JmpInstr<T1, std::true_type> { type1, OP_EXTENSION::OP_CALL };
+    }
+
+    /* Push & Pop */
+
+
+    template <typename T1>
+    constexpr auto PUSH(T1 type1) {
+        return PushInstr<T1> { type1 };
+    }
+
+    template <typename T1>
+    constexpr auto PUSH32(T1 type1) {
+        return PushInstr<T1, std::true_type> { type1 };
     }
 
     /* Fixed Size */
