@@ -167,7 +167,6 @@ namespace basm {
     // GRP2 instructions (Only allowed register for the source operand)
     enum RegCL : uint8_t { CL = 1 };
 
-
     template <typename T, template <typename...> class Template>
     struct is_specialization_of : std::false_type {};
 
@@ -1844,6 +1843,23 @@ namespace basm {
 
     constexpr MemProxy MEM {};
     constexpr Mem32Proxy MEM32 {};
+
+    template <typename T, typename = std::enable_if_t<is_register<T>()>>
+    constexpr auto reg_lower_8(const T type1) {
+
+        // Note: RSP, RBP, RSI, RDI registers convert to AH, CH, DH, BH because we can't convert them to type Reg8L
+
+        if constexpr (std::is_same_v<T, RegRAX> || std::is_same_v<T, RegEAX> || std::is_same_v<T, RegAX>)
+            return RegAL(type1);
+
+        if constexpr (std::is_same_v<T, RegRSP> || std::is_same_v<T, RegESP> || std::is_same_v<T, RegRBP> || std::is_same_v<T, RegEBP>)
+            return Reg8L(type1);
+
+        if constexpr (std::is_same_v<T, RegX> || std::is_same_v<T, RegR12> || std::is_same_v<T, RegR13> || std::is_same_v<T, RegR12D> || std::is_same_v<T, RegR13D>)
+            return RegXB(type1);
+
+        return Reg8(type1);
+    }
 
     /* Global Instructions */
 
