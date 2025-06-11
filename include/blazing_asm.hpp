@@ -36,6 +36,7 @@
 
 #ifdef __INTELLISENSE__
 #pragma diag_suppress 304
+#pragma diag_suppress 28
 #endif
 
 #ifndef BLAZING_ASSEMBLER_HPP
@@ -43,14 +44,16 @@
 
 #include <array>
 #include <type_traits>
+#include <string>
 
 namespace basm {
 
-
+    
 #pragma region Definitions
+    #define Label(i) size_t(i)
 
     struct nulltype_t {
-
+        static constexpr size_t size = 0;
     };
 
     enum OP_EXTENSION : uint8_t {
@@ -172,7 +175,6 @@ namespace basm {
 
     template <template <typename...> class Template, typename... Args>
     struct is_specialization_of<Template<Args...>, Template> : std::true_type {};
-
 
     // R8-R15 registers
     template<typename T>
@@ -537,6 +539,7 @@ namespace basm {
         }
 
     }
+
 
     template <typename MemoryT>
     constexpr void mem_calc_op_size(size_t &sz) {
@@ -1294,6 +1297,238 @@ namespace basm {
         }
     };
 
+    // ---- IMUL ----
+    template <typename FirstType, typename SecondType, typename ThirdType = nulltype_t>
+    struct ImulInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        static constexpr OperandHelper<SecondType> op2;
+        static constexpr OperandHelper<ThirdType> op3;
+
+        FirstType op1_val;
+        SecondType op2_val;
+        ThirdType op3_val;
+
+        static constexpr size_t calc_array_size() {
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "IMUL: Can't use RIP/EIP");
+            static_assert(op1.type == OperandType::Register, "IMUL: First operand must be a register");
+            static_assert(op2.type == OperandType::Register || op2.type == OperandType::Memory, "IMUL: Second operand must be register or memory");
+            static_assert(std::is_same_v<ThirdType, nulltype_t> || op3.type == OperandType::Immediate, "IMUL: Third operand must be immediate");
+            static_assert(op1.size == op2.size, "IMUL: Operand size mismatch");
+            static_assert(op1.size == OperandSize::Word || op1.size == OperandSize::DWord || op1.size == OperandSize::QWord, "IMUL: Invalid operand size");
+            static_assert(std::is_same_v<ThirdType, nulltype_t> || (op3.size == OperandSize::Byte || op3.size == OperandSize::DWord), "IMUL: Invalid immediate size");
+
+            size_t sz = 1; // Base opcode
+
+            if constexpr (std::is_same_v<ThirdType, nulltype_t>)
+                sz++; // Extra byte for 0x0F prefix
+
+            if constexpr (op_calculate_rex<SecondType, FirstType>() != 0)
+                sz++;
+
+            if constexpr (op1.size == OperandSize::Word)
+                sz++;
+
+            if constexpr (op2.type == OperandType::Memory)
+                mem_calc_op_size<SecondType>(sz);
+            else
+                sz++; // For ModRM byte
+
+            if constexpr (!std::is_same_v<ThirdType, nulltype_t>) {
+                if constexpr (op3.size == OperandSize::Byte)
+                    sz++;
+                else
+                    sz += 4;
+            }
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            handle_prefix<SecondType, FirstType>(out.data(), index, op2_val, op1_val);
+
+            if constexpr (std::is_same_v<ThirdType, nulltype_t>) {
+                out[index++] = 0x0F;
+                out[index++] = 0xAF;
+
+                if constexpr (op2.type == OperandType::Register)
+                    out[index++] = 0xC0 | ((op1_val & 0x7) << 3) | (op2_val & 0x7);
+                else
+                    mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
+            }
+            else {
+                if constexpr (op3.size == OperandSize::Byte)
+                    out[index++] = 0x6B;
+                else
+                    out[index++] = 0x69;
+
+                if constexpr (op2.type == OperandType::Register)
+                    out[index++] = 0xC0 | ((op1_val & 0x7) << 3) | (op2_val & 0x7);
+                else
+                    mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
+
+                if constexpr (op3.size == OperandSize::Byte)
+                    ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op3_val));
+                else
+                    ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op3_val));
+            }
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            auto header = encode_header();
+            return header;
+        }
+
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            auto header = encode_header();
+            return header;
+        }
+    };
+
+    // ---- Test Instruction ----
+    template <typename FirstType, typename SecondType>
+    struct TestInstr {
+        static constexpr OperandHelper<FirstType> op1;
+        static constexpr OperandHelper<SecondType> op2;
+
+        FirstType op1_val;
+        SecondType op2_val;
+
+        static constexpr size_t calc_array_size() {
+            static_assert(!std::is_same_v<FirstType, RegRIP> && !std::is_same_v<FirstType, RegEIP> && !std::is_same_v<SecondType, RegRIP> && !std::is_same_v<SecondType, RegEIP>, "TEST: Can't use RIP/EIP");
+            static_assert(op1.type != OperandType::Immediate || op2.type != OperandType::Immediate, "TEST: Can't use two immediate operands");
+            static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Memory, "TEST: Memory to memory is illegal");
+            static_assert(op1.type != OperandType::Immediate, "TEST: First operand can't be an immediate");
+            static_assert(op1.type != OperandType::None, "TEST: Unknown first operand type");
+            static_assert(op2.type != OperandType::None, "TEST: Unknown second operand type");
+            static_assert(op1.size != OperandSize::None, "TEST: Unknown first operand size");
+            static_assert(op2.size != OperandSize::None, "TEST: Unknown second operand size");
+            static_assert(!(op2.type != OperandType::Immediate && op1.size != op2.size), "TEST: Both operands must be the same size");
+            static_assert(!(op2.type == OperandType::Immediate && op1.size < op2.size), "TEST: Immediate is larger than the destination");
+            static_assert(!(op2.type == OperandType::Immediate && op2.size == OperandSize::QWord), "TEST: Can't use 64-bit immediate");
+
+            size_t sz = 1;
+
+            if constexpr (op_calculate_rex<FirstType, SecondType>() != 0)
+                sz++;
+
+            if constexpr (op1.size == OperandSize::Word || (!is_imm<SecondType>() && op2.size == OperandSize::Word))
+                sz++;
+
+            if constexpr (op2.type == OperandType::Immediate) {
+                if constexpr (op1.type == OperandType::Register && !is_accumulator<FirstType>())
+                    sz++;
+                
+                if constexpr (op1.size > op2.size)
+                {
+                    if constexpr (op1.size == OperandSize::Word)
+                        sz += 2;
+                    else
+                        sz += 4;
+                    // Expand the immediate
+                    // Can cause index issues if there are data to write after immediate (Not a single situation that I am aware of)
+                }
+                else
+                    sz += size_t(op2.size);
+
+            }
+            else if constexpr (op1.type == OperandType::Register && op2.type == OperandType::Register)
+                sz++;
+
+            if constexpr (op1.type == OperandType::Memory)
+                mem_calc_op_size<FirstType>(sz);
+            else if constexpr (op2.type == OperandType::Memory)
+                mem_calc_op_size<SecondType>(sz);
+
+            return sz;
+        }
+
+        static constexpr size_t size = calc_array_size();
+        constexpr std::array<uint8_t, size> encode_header() const {
+            std::array<uint8_t, size> out = {};
+            size_t index = 0;
+
+            handle_prefix<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+
+            if constexpr (op1.type == OperandType::Register) {
+                if constexpr (op2.type == OperandType::Immediate) {
+
+                    if constexpr (is_accumulator<FirstType>() && op1.size == OperandSize::Byte && op2.size == OperandSize::Byte)
+                        out[index++] = 0xA8;
+                    else if constexpr (is_accumulator<FirstType>())
+                        out[index++] = 0xA9;
+                    else {
+                        out[index] = 0xF6;
+
+                        if constexpr (op1.size != OperandSize::Byte)
+                            out[index] += 0x1;
+                        
+                        index++;
+                        out[index++] = 0xC0 | (op1_val & 0x7);
+                    }
+                    
+                    if constexpr (op2.size == OperandSize::DWord)
+                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
+                    else if constexpr (op2.size == OperandSize::Byte)
+                        ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+                    else
+                        ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
+
+
+                }
+                else {
+                    out[index] = 0x84;
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index]++;
+                    index++;
+
+                    if constexpr (op2.type == OperandType::Register)
+                        out[index++] = 0xC0 | ((op2_val & 0x7) << 3) | (op1_val & 0x7);
+                    else
+                        mem_handle_op<SecondType, FirstType, std::true_type>(out.data(), index, op2_val, op1_val);
+                }
+                
+            }
+            else if constexpr (op1.type == OperandType::Memory) {
+                if constexpr (op2.type == OperandType::Immediate) {
+                    out[index] = 0xF6;
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index]++;
+                    index++;
+                    mem_handle_op<FirstType, nulltype_t>(out.data(), index, op1_val, {});
+
+                    if constexpr (op2.size == OperandSize::Byte)
+                        ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op2_val));
+                    else if constexpr (op2.size == OperandSize::Word)
+                        ConstWrite<uint16_t>(out.data() + index, static_cast<uint16_t>(op2_val));
+                    else
+                        ConstWrite<uint32_t>(out.data() + index, static_cast<uint32_t>(op2_val));
+                }
+                else {
+                    out[index] = 0x84;
+                    if constexpr (op1.size != OperandSize::Byte)
+                        out[index]++;
+                    index++;
+                    mem_handle_op<FirstType, SecondType>(out.data(), index, op1_val, op2_val);
+                }
+            }
+
+            return out;
+        }
+
+        inline std::array<uint8_t, size> encode() const {
+            return encode_header();
+        }
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            return encode_header();
+        }
+    };
+
     // ---- Conditional Jumps ----
     template <typename FirstType>
     struct CondJmpInstr {
@@ -1659,6 +1894,25 @@ namespace basm {
         }
     };
 
+    // ---- Label ----
+    template <typename InstrT = nulltype_t>
+    struct LabelInstr {
+        const uint64_t hash;
+        InstrT instr;
+        static constexpr size_t size = InstrT::size;
+        constexpr std::array<uint8_t, size> encode() const {
+            if constexpr (std::is_same_v<InstrT, nulltype_t>)
+                return std::array<uint8_t, size> {};
+            else
+                return instr.encode();
+        }
+        constexpr std::array<uint8_t, size> encode_constexpr() const {
+            if constexpr (std::is_same_v<InstrT, nulltype_t>)
+                return std::array<uint8_t, size> {};
+            else
+                return instr.encode_constexpr();
+        }
+    };
 
     // ---- Append Bytes ----
     template <typename... Bytes>
@@ -1677,6 +1931,34 @@ namespace basm {
 
 #pragma endregion Instructions
 
+
+    template <typename... Instrs>
+    struct count_label_instr {
+        static constexpr size_t total = 0;
+        static constexpr size_t label = 0;
+    };
+
+    template <typename First, typename... Rest>
+    struct count_label_instr<First, Rest...> {
+        static constexpr size_t total = is_specialization_of<First, LabelInstr>::value + count_label_instr<Rest...>::total;
+        static constexpr size_t label = (std::is_same_v<First, LabelInstr<nulltype_t>> ? 1 : 0) + count_label_instr<Rest...>::label;
+    };
+
+
+    template<size_t len, size_t len2>
+    constexpr void relocate_target(uint8_t* arr, std::array<std::pair<uint64_t, uint64_t>, len> &labels, std::array<std::pair<uint64_t, uint64_t>, len2>& label_instrs) {
+        for (size_t j = 0; j < len2; j++) {
+            for (size_t i = 0; i < len; i++) {
+                if (labels[i].second == label_instrs[j].second)
+                {
+                    size_t offset = label_instrs[j].first;
+                    ConstWrite<uint32_t>(arr + offset, labels[i].first - (offset + 4));
+                    break;
+                }
+            }
+        }
+    }
+
     // ---- Dynamic Assembler Core ----
     template<typename... Instrs>
     std::array<uint8_t, total_size<Instrs...>> assemble(const Instrs&... instrs) {
@@ -1685,22 +1967,67 @@ namespace basm {
         std::array<uint8_t, total_size<Instrs...>> code = {};
         size_t offset = 0;
 
+        using CountLabelT = count_label_instr<Instrs...>;
+
+        constexpr size_t label_len = CountLabelT::label;
+        constexpr bool has_label = label_len > 0;
+        constexpr size_t labelinstr_len = (has_label ? CountLabelT::total - label_len : 0);
+
+        std::array<std::pair<uint64_t, uint64_t>, label_len> labels = {};
+        std::array<std::pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
+
+        size_t label_index = 0;
+        size_t labelinstr_index = 0;
 
         auto emit = [&](auto&& instr) {
             auto bytes = instr.encode();
-            std::memcpy(code.data() + offset, bytes.data(), bytes.size());
-            offset += bytes.size();
-            };
+            constexpr size_t byte_count = bytes.size();
+            std::memcpy(code.data() + offset, bytes.data(), byte_count);
+            
+            if constexpr (has_label) {
+
+                using InstrT = std::remove_cvref_t<decltype(instr)>;
+
+                if constexpr (is_specialization_of<InstrT, LabelInstr>::value)
+                {
+                    if constexpr (std::is_same_v<InstrT, LabelInstr<nulltype_t>>)
+                        labels[label_index++] = std::pair(offset, instr.hash);
+                    else
+                        label_instrs[labelinstr_index++] = std::pair(offset + byte_count - 4, instr.hash);
+                }
+
+            }
+
+            offset += byte_count;
+
+        };
 
         (emit(instrs), ...);
+
+        if constexpr (has_label)
+            relocate_target(code.data(), labels, label_instrs);
         return code;
     }
 
     // ---- Static Assembler Core ----
+
     template <typename... Instrs>
     constexpr auto assemble_static(const Instrs&... instrs) {
         static_assert(total_size<Instrs...> < 1024, "Exceeds the stack limit");
         std::array<uint8_t, total_size<Instrs...>> code{};
+
+        using CountLabelT = count_label_instr<Instrs...>;
+
+        constexpr size_t label_len = CountLabelT::label;
+        constexpr bool has_label = label_len > 0;
+        constexpr size_t labelinstr_len = (has_label ? CountLabelT::total - label_len : 0);
+
+        std::array<std::pair<uint64_t, uint64_t>, label_len> labels = {};
+        std::array<std::pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
+
+        size_t label_index = 0;
+        size_t labelinstr_index = 0;
+
 
         size_t offset = 0;
         auto emit = [&](auto&& instr) constexpr {
@@ -1711,20 +2038,40 @@ namespace basm {
                 else
                     return instr.encode();
 
-            }();
-
+                }();
 
             const size_t byte_count = bytes.size();
             if (offset + byte_count <= code.size()) {
-                for (size_t i = 0; i < byte_count; ++i) {
-                    code[offset + i] = bytes[i];
+
+                if constexpr (byte_count) {
+                    for (size_t i = 0; i < byte_count; ++i) {
+                        code[offset + i] = bytes[i];
+                    }
+                }
+                
+                if constexpr (has_label) {
+
+                    using InstrT = std::remove_cvref_t<decltype(instr)>;
+
+                    if constexpr (is_specialization_of<InstrT, LabelInstr>::value)
+                    {
+                        if constexpr (std::is_same_v<InstrT, LabelInstr<nulltype_t>>)
+                            labels[label_index++] = std::pair(offset, instr.hash);
+                        else
+                            label_instrs[labelinstr_index++] = std::pair(offset + byte_count - 4, instr.hash);
+                    }
+
                 }
                 offset += byte_count;
             }
 
-        };
+            };
 
         (emit(instrs), ...);
+
+        if constexpr (has_label)
+            relocate_target(code.data(), labels, label_instrs);
+        
         return code;
     }
 
@@ -1880,6 +2227,12 @@ namespace basm {
         return ByteInstr<std::decay_t<BytesT>...>{std::forward<BytesT>(bytes)...};
     }
 
+    /* Label */
+
+    constexpr auto BIND(const size_t hash) {
+        return LabelInstr{ hash };
+    }
+
     /* GRP1 */
 
     template <typename T1, typename T2>
@@ -2009,6 +2362,11 @@ namespace basm {
 
     /* GRP3 */
 
+    template <typename T1, typename T2>
+    constexpr auto TEST(T1 type1, T2 type2) {
+        return TestInstr<T1, T2> { type1, type2 };
+    }
+
     template <typename T1>
     constexpr auto NOT(T1 type1) {
         return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_NOT };
@@ -2038,13 +2396,30 @@ namespace basm {
     constexpr auto IDIV(T1 type1) {
         return UnaryArithInstr<T1> { type1, OP_EXTENSION::OP_IDIV };
     }
+    
 
+    /* IMUL */
+
+    template <typename T1, typename T2>
+    constexpr auto IMUL(T1 type1, T2 type2) {
+        return ImulInstr<T1, T2>{type1, type2, {}};
+    }
+
+    template <typename T1, typename T2, typename T3>
+    constexpr auto IMUL(T1 type1, T2 type2, T3 type3) {
+        return ImulInstr<T1, T2, T3>{type1, type2, type3};
+    }
 
     /* Conditional Jumps */
 
     template <typename T1>
     constexpr auto JCC(Conditions cond, T1 type1) {
         return CondJmpInstr<T1> { type1, cond };
+    }
+
+    constexpr auto JCC(Conditions cond, const uint64_t hash) {
+
+        return LabelInstr<CondJmpInstr<int32_t>>{hash, CondJmpInstr<int32_t> { 0, cond }};
     }
     
     
