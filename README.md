@@ -14,7 +14,7 @@ If you need to generate x86-64 machine code with minimal overhead and maximum co
 
 That being said, `BlazingASM` is intentionally minimal and focused; it doesn’t aim to match AsmJit’s vast instruction coverage, runtime flexibility, or feature set. Instead, it trades breadth for simplicity and performance ~ making it a practical tool when you know exactly what code you need, and want it fast and small.
 
-For a better demonstration, below is a screenshot of the comparison between the code and the decompilation:
+For a better demonstration, below is a screenshot of the comparison between the code and the decompilation (`assemble_static()` mode):
 
 ![assemble_static_disassembly](https://github.com/user-attachments/assets/97f339c1-a1e7-4b66-a3f6-4e8e3e774ead)
 
