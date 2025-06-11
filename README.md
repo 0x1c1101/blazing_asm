@@ -27,6 +27,7 @@ For a better demonstration, below is a screenshot of the comparison between the 
 |                           | `LEA`                                                  | Load effective address                                             |
 |                           | `DB(...)`                                              | Define raw byte(s) (data injection)                                |
 | **Arithmetic (GRP1)**     | `ADD`, `OR`, `ADC`, `SBB`, `AND`, `SUB`, `XOR`, `CMP`  | Basic arithmetic and bitwise operations                            |
+|                           | `TEST`                                                 | Bitwise AND for flag setting (no result stored)                    |
 | **Shifts/Rotates (GRP2)** | `ROL`, `ROR`, `RCL`, `RCR`, `SHL`, `SAL`, `SHR`, `SAR` | Support both constant and 1-bit variants (`ROL1`, `ROR1`, etc.)    |
 | **Unary Ops (GRP3)**      | `NOT`, `NEG`                                           | Logical negation, two's complement                                 |
 |                           | `MUL`, `IMUL`                                          | Unsigned and signed multiplication                                 |
