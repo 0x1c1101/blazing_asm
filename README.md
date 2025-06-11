@@ -38,7 +38,7 @@ For a better demonstration, below is a screenshot of the comparison between the 
 |                           | `POPF`, `PUSHF`                                        | Push/pop flags                                                     |
 | **Fixed Instructions**    | `RET`                                                  | Return from procedure                                              |
 |                           | `NOP`                                                  | No operation                                                       |
-| **Planned**               | `Labels`, `FPU Ops`, `TEST`, `INC/DEC`                 | 🚧 Coming Soon...                                                 |
+| **Planned**               |  `FPU Ops`, `INC/DEC`                                  | 🚧 Coming Soon...                                                  |
 
 ## Setting it up
 
