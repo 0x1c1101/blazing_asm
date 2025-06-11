@@ -3,6 +3,8 @@
 
 
 [![Discord](https://img.shields.io/badge/chat-on%20Discord-green.svg)](https://discord.gg/GdYanwSCwm)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL3-blue.svg)](LICENSE)
+
 
 A simple and lightweight assembler library that supports the majority of significant instructions from the Intel x86-64 architecture. Mainly beneficial for shellcode development and runtime bytecode generation. Due to its design, it can produce the machine code quite fast while allowing you to generate and use random registers/immediates at runtime.
 
