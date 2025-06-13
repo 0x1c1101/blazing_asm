@@ -44,7 +44,6 @@
 
 #include <array>
 #include <type_traits>
-#include <string>
 
 namespace basm {
 
