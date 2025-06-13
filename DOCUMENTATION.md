@@ -4,8 +4,6 @@ This guide outlines a high-performance assembler framework aimed at explicit mac
 
 Unlike usual assemblers generating text-based assembly code, this system is low-level, generating raw bytecode with minimal overhead. This enables execution at speeds of lightning and instruction encoding with detailed control, optimally suited for performance-critical applications such as runtime code generation, exploit writing, or embedded systems programming.
 
-In the following sections, you will find a detailed explanation on how to perform each of the instructions employed, what registers to use and how they compare to machine registers, and how you can tailor and integrate this assembler into your specifications.
-
 # Operand Types
 
 There are 3 kind of operands:
@@ -91,3 +89,46 @@ MOV(ECX, MEM32.DWORD[EAX + int8_t(4)]); // Base + Displacement (8 bits)
 ```
 
 When `MEM32` is used, the assembler doesn't append the `0x67` (32-bit Register mode in a memory operand for x64 operations) prefix byte, allowing you to write 32-bit only assembly code.
+
+# Labels
+
+To define a label, there's a `Label()` macro that casts the integer to `size_t` since 64-bit immediate operands are mostly prohibited. Currently, labels only support control flow instructions (`JCC`, `JMP`, `JMP32`, `CALL`, `CALL32`) to simplify the development of such shellcodes. In order to place a label at a certain position, use the `BIND()` instruction. Afterwards you can pass the label variable into said instructions. Make sure to define each label uniquely for every `assemble()` operation. Connecting instructions with the specified labels is done with the help of a hash map. For example, if you have bounded 2 labels each ID will be reduced to 2 modulo (`ID % 2`). Therefore in the case of 2 total bounded labels, initializing them with `0` and `3` will lead to a collision. There won't be any errors but those two labels will point to the last bounded label offset.
+
+```cpp
+constexpr auto loop = Label(0); // constexpr size_t loop = 0;
+constexpr auto done = Label(1); // constexpr size_t done = 1;
+
+auto shellcode = assemble(
+TEST(R10, R10),
+JCC(JZ, done), // jz done
+
+BIND(loop), // .loop:
+
+XOR(RAX, RAX),
+ADD(R13, uint8_t(4)),
+SUB(R10, uint8_t(1)),
+TEST(R10, R10),
+JCC(JNZ, loop), // jnz loop
+
+BIND(done), // .done:
+
+RET()
+);
+```
+
+Due to the design limitations, we can't evaluate labels during emission so a slight decrease in speed at runtime is expected. This is obviously not the case with static constexpr emitter.
+
+Also a side note: Branch operations with labels do not support short jumps that take only a byte. For the sake of simplicity, 32-bit displacement is used when measuring the distance between the label and the instruction. If you want a smaller shellcode, you can hardcode the displacement as `int8_t`.
+
+# Static and Dynamic emitter
+
+When `constexpr auto shellcode = assemble_static(...)` is used, assembler emits the entire code at compile-time. Which means zero runtime overhead, just like initializing a regular hardcoded `std::array<uint8_t>`.
+
+On the other hand, using `auto shellcode = assemble(...)` still does the necessary work at compile-time. However it enables generating desired variables at runtime while maintaining the performance. Some operations are inlined because they can't be determined until the execution. It is still quite fast compared to text-based assemblers.
+
+# Recommendations
+
+Enabling [precompiled headers](https://en.wikipedia.org/wiki/Precompiled_header) is highly recommended to reduce compilation time as well. The compiler simply converts this header file into a compiled shared object, allowing you to use it without having to compile it each time.
+
+
+
