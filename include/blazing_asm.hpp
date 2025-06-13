@@ -1940,22 +1940,21 @@ namespace basm {
 
     template <typename First, typename... Rest>
     struct count_label_instr<First, Rest...> {
-        static constexpr size_t total = is_specialization_of<First, LabelInstr>::value + count_label_instr<Rest...>::total;
-        static constexpr size_t label = (std::is_same_v<First, LabelInstr<nulltype_t>> ? 1 : 0) + count_label_instr<Rest...>::label;
+        using RestT = count_label_instr<Rest...>;
+
+        static constexpr size_t total = is_specialization_of<First, LabelInstr>::value + RestT::total;
+        static constexpr size_t label = (std::is_same_v<First, LabelInstr<nulltype_t>> ? 1 : 0) + RestT::label;
     };
 
 
     template<size_t len, size_t len2>
-    constexpr void relocate_target(uint8_t* arr, std::array<std::pair<uint64_t, uint64_t>, len> &labels, std::array<std::pair<uint64_t, uint64_t>, len2>& label_instrs) {
+    constexpr void relocate_targets(uint8_t* arr, std::array<uint64_t, len> &labels, std::array<std::pair<uint64_t, uint64_t>, len2>& label_instrs) {
         for (size_t j = 0; j < len2; j++) {
-            for (size_t i = 0; i < len; i++) {
-                if (labels[i].second == label_instrs[j].second)
-                {
-                    size_t offset = label_instrs[j].first;
-                    ConstWrite<uint32_t>(arr + offset, labels[i].first - (offset + 4));
-                    break;
-                }
-            }
+
+            size_t offset = label_instrs[j].first;
+            size_t hash = label_instrs[j].second;
+            ConstWrite<uint32_t>(arr + offset, labels[hash % len] - (offset + 4));
+
         }
     }
 
@@ -1973,10 +1972,9 @@ namespace basm {
         constexpr bool has_label = label_len > 0;
         constexpr size_t labelinstr_len = (has_label ? CountLabelT::total - label_len : 0);
 
-        std::array<std::pair<uint64_t, uint64_t>, label_len> labels = {};
+        std::array<uint64_t, label_len> labels = {};
         std::array<std::pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
 
-        size_t label_index = 0;
         size_t labelinstr_index = 0;
 
         auto emit = [&](auto&& instr) {
@@ -1991,7 +1989,7 @@ namespace basm {
                 if constexpr (is_specialization_of<InstrT, LabelInstr>::value)
                 {
                     if constexpr (std::is_same_v<InstrT, LabelInstr<nulltype_t>>)
-                        labels[label_index++] = std::pair(offset, instr.hash);
+                        labels[instr.hash % label_len] = offset;
                     else
                         label_instrs[labelinstr_index++] = std::pair(offset + byte_count - 4, instr.hash);
                 }
@@ -2005,12 +2003,11 @@ namespace basm {
         (emit(instrs), ...);
 
         if constexpr (has_label)
-            relocate_target(code.data(), labels, label_instrs);
+            relocate_targets(code.data(), labels, label_instrs);
         return code;
     }
 
     // ---- Static Assembler Core ----
-
     template <typename... Instrs>
     constexpr auto assemble_static(const Instrs&... instrs) {
         static_assert(total_size<Instrs...> < 1024, "Exceeds the stack limit");
@@ -2022,10 +2019,9 @@ namespace basm {
         constexpr bool has_label = label_len > 0;
         constexpr size_t labelinstr_len = (has_label ? CountLabelT::total - label_len : 0);
 
-        std::array<std::pair<uint64_t, uint64_t>, label_len> labels = {};
+        std::array<uint64_t, label_len> labels = {};
         std::array<std::pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
 
-        size_t label_index = 0;
         size_t labelinstr_index = 0;
 
 
@@ -2056,12 +2052,14 @@ namespace basm {
                     if constexpr (is_specialization_of<InstrT, LabelInstr>::value)
                     {
                         if constexpr (std::is_same_v<InstrT, LabelInstr<nulltype_t>>)
-                            labels[label_index++] = std::pair(offset, instr.hash);
+                            labels[instr.hash % label_len] = offset;
                         else
                             label_instrs[labelinstr_index++] = std::pair(offset + byte_count - 4, instr.hash);
                     }
 
                 }
+
+
                 offset += byte_count;
             }
 
@@ -2070,7 +2068,7 @@ namespace basm {
         (emit(instrs), ...);
 
         if constexpr (has_label)
-            relocate_target(code.data(), labels, label_instrs);
+            relocate_targets(code.data(), labels, label_instrs);
         
         return code;
     }
@@ -2218,6 +2216,34 @@ namespace basm {
     template <typename T1, typename T2>
     constexpr auto LEA(T1 type1, T2 type2) {
         return LeaInstr<T1, T2> { type1, type2 };
+    }
+
+    /* Label Instructions */
+
+    constexpr auto JCC(Conditions cond, const uint64_t hash) {
+        using TypeT = CondJmpInstr<int32_t>;
+        return LabelInstr<TypeT>{hash, TypeT { 0, cond }};
+    }
+
+    constexpr auto JMP(const uint64_t hash) {
+        using TypeT = JmpInstr<int32_t, nulltype_t, std::true_type>;
+        return LabelInstr<TypeT>{hash, TypeT{ 0, OP_EXTENSION::OP_JMP }};
+    }
+
+    constexpr auto JMP32(const uint64_t hash) {
+        using TypeT = JmpInstr<int32_t, std::true_type, std::true_type>;
+        return LabelInstr<TypeT>{hash, TypeT { 0, OP_EXTENSION::OP_JMP }};
+
+    }
+
+    constexpr auto CALL(const uint64_t hash) {
+        using TypeT = JmpInstr<int32_t>;
+        return LabelInstr<TypeT>{hash, TypeT{ 0, OP_EXTENSION::OP_CALL }};
+    }
+
+    constexpr auto CALL32(const uint64_t hash) {
+        using TypeT = JmpInstr<int32_t, std::true_type>;
+        return LabelInstr<TypeT>{hash, TypeT{ 0, OP_EXTENSION::OP_CALL }};
     }
 
     /* Define Bytes */
@@ -2417,12 +2443,6 @@ namespace basm {
         return CondJmpInstr<T1> { type1, cond };
     }
 
-    constexpr auto JCC(Conditions cond, const uint64_t hash) {
-
-        return LabelInstr<CondJmpInstr<int32_t>>{hash, CondJmpInstr<int32_t> { 0, cond }};
-    }
-    
-    
     /* Jump & Call */
 
     template <typename T1>
