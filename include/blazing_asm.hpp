@@ -2123,9 +2123,9 @@ namespace basm {
     constexpr void relocate_targets(uint8_t* arr, trait::array<uint64_t, len> &labels, trait::array<trait::pair<uint64_t, uint64_t>, len2>& label_instrs) {
         for (size_t j = 0; j < len2; j++) {
 
-            size_t offset = label_instrs[j].first;
-            size_t hash = label_instrs[j].second;
-            ConstWrite<uint32_t>(arr + offset, labels[hash % len] - (offset + 4));
+            uint64_t offset = label_instrs[j].first;
+            uint64_t hash = label_instrs[j].second;
+            ConstWrite<uint32_t>(arr + offset, (labels[hash % len] - (offset + 4)) & 0xFFFFFFFF);
 
         }
     }
@@ -2231,7 +2231,7 @@ namespace basm {
                         if constexpr (trait::is_same_v<InstrT, LabelInstr<nulltype_t>>)
                             labels[instr.hash % label_len] = offset;
                         else
-                            label_instrs[labelinstr_index++] = pair(offset + byte_count - 4, instr.hash);
+                            label_instrs[labelinstr_index++] = trait::pair(offset + byte_count - 4, instr.hash);
                     }
 
                 }
