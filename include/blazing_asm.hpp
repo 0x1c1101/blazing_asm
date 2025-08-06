@@ -43,27 +43,26 @@
 #define BLAZING_ASSEMBLER_HPP
 
 
-namespace basm {
+#if defined(_STL_ASSERT)
 
+#include <array>
+#include <type_traits>
 
-#pragma region Definitions
+namespace trait = std;
 
-    // ---- STL Definitions ----
+#else
+    
+typedef signed char        int8_t;
+typedef short              int16_t;
+typedef int                int32_t;
+typedef long long          int64_t;
+typedef unsigned char      uint8_t;
+typedef unsigned short     uint16_t;
+typedef unsigned int       uint32_t;
+typedef unsigned long long uint64_t;
 
-    typedef signed char        int8_t;
-    typedef short              int16_t;
-    typedef int                int32_t;
-    typedef long long          int64_t;
-    typedef unsigned char      uint8_t;
-    typedef unsigned short     uint16_t;
-    typedef unsigned int       uint32_t;
-    typedef unsigned long long uint64_t;
-
-    struct nulltype_t {
-        static constexpr size_t size = 0;
-    };
-
-
+namespace trait {
+    
     template <bool _Test, class _Ty = void>
     struct enable_if {}; // no member "type" when !_Test
 
@@ -74,13 +73,13 @@ namespace basm {
 
     template <bool _Test, class _Ty = void>
     using enable_if_t = typename enable_if<_Test, _Ty>::type;
-    
+
 
     template <class, class>
     constexpr bool is_same_v = false; // determine whether arguments are the same type
     template <class _Ty>
     constexpr bool is_same_v<_Ty, _Ty> = true;
-    
+
 
     template<typename T, T v>
     struct integral_constant {
@@ -98,7 +97,7 @@ namespace basm {
     using false_type = bool_constant<false>;
 
     template <typename T, size_t N>
-    struct static_array {
+    struct array {
         T _arr[N];
 
         constexpr T& operator[](size_t index) noexcept {
@@ -129,7 +128,7 @@ namespace basm {
 
     // Empty array
     template <typename T>
-    struct static_array<T, 0> {
+    struct trait::array<T, 0> {
         constexpr size_t size() const noexcept { return 0; }
         // No data member
     };
@@ -148,12 +147,6 @@ namespace basm {
         constexpr pair(U1&& a, U2&& b)
             : first(static_cast<U1&&>(a)), second(static_cast<U2&&>(b)) {}
     };
-
-    template <typename T, template <typename...> class Template>
-    struct is_specialization_of : false_type {};
-
-    template <template <typename...> class Template, typename... Args>
-    struct is_specialization_of<Template<Args...>, Template> : true_type {};
 
     template<typename T> struct remove_reference { using type = T; };
     template<typename T> struct remove_reference<T&> { using type = T; };
@@ -213,7 +206,28 @@ namespace basm {
     using remove_reference_t = typename remove_reference<T>::type;
 
     template<typename T>
-    constexpr typename remove_reference<T>::type&& declval() noexcept;
+    inline constexpr typename remove_reference<T>::type&& declval() noexcept;
+
+};
+
+#endif
+
+
+namespace basm {
+
+
+#pragma region Definitions
+
+    struct nulltype_t {
+        static constexpr size_t size = 0;
+    };
+
+    template <typename T, template <typename...> class Template>
+    struct is_specialization_of : trait::false_type {};
+
+    template <template <typename...> class Template, typename... Args>
+    struct is_specialization_of<Template<Args...>, Template> : trait::true_type {};
+
 
     #define Label(i) size_t(i)
 
@@ -337,10 +351,10 @@ namespace basm {
     // R8-R15 registers
     template<typename T>
     constexpr bool is_reg_r() {
-        if constexpr (is_same_v<T, RegX> || is_same_v<T, RegXD> ||
-            is_same_v<T, RegR12> || is_same_v<T, RegR13> || 
-            is_same_v<T, RegR12D> || is_same_v<T, RegR13D> || 
-            is_same_v<T, RegXW> || is_same_v<T, RegXB>)
+        if constexpr (trait::is_same_v<T, RegX> || trait::is_same_v<T, RegXD> ||
+            trait::is_same_v<T, RegR12> || trait::is_same_v<T, RegR13> || 
+            trait::is_same_v<T, RegR12D> || trait::is_same_v<T, RegR13D> || 
+            trait::is_same_v<T, RegXW> || trait::is_same_v<T, RegXB>)
             return true;
         return false;
     }
@@ -349,31 +363,31 @@ namespace basm {
     template<typename T>
     constexpr bool is_register() {
         if constexpr (
-            is_same_v<T, Reg64> ||
-            is_same_v<T, Reg32> ||
-            is_same_v<T, Reg16> ||
-            is_same_v<T, Reg8> ||
-            is_same_v<T, Reg8L> ||
-            is_same_v<T, Reg8H> ||
-            is_same_v<T, RegX> ||
-            is_same_v<T, RegXD> ||
-            is_same_v<T, RegXW> ||
-            is_same_v<T, RegXB> ||
-            is_same_v<T, RegRSP> ||
-            is_same_v<T, RegESP> ||
-            is_same_v<T, RegR12> ||
-            is_same_v<T, RegR12D> ||
-            is_same_v<T, RegRBP> ||
-            is_same_v<T, RegEBP> ||
-            is_same_v<T, RegR13> ||
-            is_same_v<T, RegR13D> ||
-            is_same_v<T, RegRAX> ||
-            is_same_v<T, RegEAX> ||
-            is_same_v<T, RegAX> ||
-            is_same_v<T, RegAL> ||
-            is_same_v<T, RegCL> ||
-            is_same_v<T, RegRIP> ||
-            is_same_v<T, RegEIP>
+            trait::is_same_v<T, Reg64> ||
+            trait::is_same_v<T, Reg32> ||
+            trait::is_same_v<T, Reg16> ||
+            trait::is_same_v<T, Reg8> ||
+            trait::is_same_v<T, Reg8L> ||
+            trait::is_same_v<T, Reg8H> ||
+            trait::is_same_v<T, RegX> ||
+            trait::is_same_v<T, RegXD> ||
+            trait::is_same_v<T, RegXW> ||
+            trait::is_same_v<T, RegXB> ||
+            trait::is_same_v<T, RegRSP> ||
+            trait::is_same_v<T, RegESP> ||
+            trait::is_same_v<T, RegR12> ||
+            trait::is_same_v<T, RegR12D> ||
+            trait::is_same_v<T, RegRBP> ||
+            trait::is_same_v<T, RegEBP> ||
+            trait::is_same_v<T, RegR13> ||
+            trait::is_same_v<T, RegR13D> ||
+            trait::is_same_v<T, RegRAX> ||
+            trait::is_same_v<T, RegEAX> ||
+            trait::is_same_v<T, RegAX> ||
+            trait::is_same_v<T, RegAL> ||
+            trait::is_same_v<T, RegCL> ||
+            trait::is_same_v<T, RegRIP> ||
+            trait::is_same_v<T, RegEIP>
             )
             return true;
         return false;
@@ -396,14 +410,14 @@ namespace basm {
     template<typename T>
     constexpr bool is_imm() {
         if constexpr (
-            is_same_v<T, uint64_t> ||
-            is_same_v<T, int64_t> ||
-            is_same_v<T, uint32_t> ||
-            is_same_v<T, int32_t> ||
-            is_same_v<T, uint16_t> ||
-            is_same_v<T, int16_t> ||
-            is_same_v<T, uint8_t> ||
-            is_same_v<T, int8_t>)
+            trait::is_same_v<T, uint64_t> ||
+            trait::is_same_v<T, int64_t> ||
+            trait::is_same_v<T, uint32_t> ||
+            trait::is_same_v<T, int32_t> ||
+            trait::is_same_v<T, uint16_t> ||
+            trait::is_same_v<T, int16_t> ||
+            trait::is_same_v<T, uint8_t> ||
+            trait::is_same_v<T, int8_t>)
             return true;
         return false;
     }
@@ -411,10 +425,10 @@ namespace basm {
     template<typename T>
     constexpr bool is_accumulator() {
         if constexpr (
-            is_same_v<T, RegRAX> ||
-            is_same_v<T, RegEAX> ||
-            is_same_v<T, RegAX> ||
-            is_same_v<T, RegAL>)
+            trait::is_same_v<T, RegRAX> ||
+            trait::is_same_v<T, RegEAX> ||
+            trait::is_same_v<T, RegAX> ||
+            trait::is_same_v<T, RegAL>)
             return true;
         return false;
     }
@@ -422,15 +436,15 @@ namespace basm {
     template<typename B, typename I>
     static constexpr bool require_sib() {
         if constexpr (
-            is_same_v<B, RegRSP> ||
-            is_same_v<B, RegESP> ||
-            is_same_v<B, RegR12> ||
-            is_same_v<B, RegR12D>)
+            trait::is_same_v<B, RegRSP> ||
+            trait::is_same_v<B, RegESP> ||
+            trait::is_same_v<B, RegR12> ||
+            trait::is_same_v<B, RegR12D>)
             return true;
-        if constexpr (!is_same_v<I, nulltype_t>)
+        if constexpr (!trait::is_same_v<I, nulltype_t>)
             return true;
 
-        if constexpr (is_same_v<B, nulltype_t>)
+        if constexpr (trait::is_same_v<B, nulltype_t>)
             return true;
 
         return false;
@@ -438,18 +452,18 @@ namespace basm {
     template<typename B, typename I, typename D>
     static constexpr bool require_disp() {
         if constexpr (
-            is_same_v<B, RegRIP> ||
-            is_same_v<B, RegEIP> ||
-            is_same_v<B, RegRBP> ||
-            is_same_v<B, RegEBP> ||
-            is_same_v<B, RegR13> ||
-            is_same_v<B, RegR13D>)
+            trait::is_same_v<B, RegRIP> ||
+            trait::is_same_v<B, RegEIP> ||
+            trait::is_same_v<B, RegRBP> ||
+            trait::is_same_v<B, RegEBP> ||
+            trait::is_same_v<B, RegR13> ||
+            trait::is_same_v<B, RegR13D>)
             return true;
 
-        if constexpr (!is_same_v<D, nulltype_t>)
+        if constexpr (!trait::is_same_v<D, nulltype_t>)
             return true;
 
-        if constexpr (is_same_v<B, nulltype_t>)
+        if constexpr (trait::is_same_v<B, nulltype_t>)
             return true;
 
         return false;
@@ -458,34 +472,34 @@ namespace basm {
 
     template <typename OpSizeT = nulltype_t, typename BaseRegT = nulltype_t, typename IndexRegT = nulltype_t, typename DispSizeT = nulltype_t, typename x86T = nulltype_t>
     struct Memory {
-        static_assert(is_reg64<BaseRegT>() || is_reg32<BaseRegT>() || is_same_v<BaseRegT, nulltype_t>, "Invalid base register type");
-        static_assert(is_reg64<IndexRegT>() || is_reg32<IndexRegT>() || is_same_v<IndexRegT, nulltype_t>, "Invalid index register type");
+        static_assert(is_reg64<BaseRegT>() || is_reg32<BaseRegT>() || trait::is_same_v<BaseRegT, nulltype_t>, "Invalid base register type");
+        static_assert(is_reg64<IndexRegT>() || is_reg32<IndexRegT>() || trait::is_same_v<IndexRegT, nulltype_t>, "Invalid index register type");
 
 
         static_assert(
-            get_op_size<BaseRegT>() == get_op_size<IndexRegT>() || is_same_v<BaseRegT, nulltype_t> || is_same_v<IndexRegT, nulltype_t>
+            get_op_size<BaseRegT>() == get_op_size<IndexRegT>() || trait::is_same_v<BaseRegT, nulltype_t> || trait::is_same_v<IndexRegT, nulltype_t>
             , "Invalid base/index expression");
 
-        static_assert(!is_same_v<OpSizeT, nulltype_t>, "Invalid operand size");
+        static_assert(!trait::is_same_v<OpSizeT, nulltype_t>, "Invalid operand size");
         static_assert(
             (is_imm<DispSizeT>() && (get_op_size<DispSizeT>() == OperandSize::Byte || get_op_size<DispSizeT>() == OperandSize::DWord)) ||
-            is_same_v<DispSizeT, nulltype_t>
+            trait::is_same_v<DispSizeT, nulltype_t>
             , "Invalid displacement size");
 
 
         static_assert(
-            !is_same_v<IndexRegT, RegRSP> &&
-            !is_same_v<IndexRegT, RegESP> &&
-            !is_same_v<IndexRegT, RegRIP> &&
-            !is_same_v<IndexRegT, RegEIP>
+            !trait::is_same_v<IndexRegT, RegRSP> &&
+            !trait::is_same_v<IndexRegT, RegESP> &&
+            !trait::is_same_v<IndexRegT, RegRIP> &&
+            !trait::is_same_v<IndexRegT, RegEIP>
             , "RSP/ESP/RIP/EIP can't be an index register.");
 
         static_assert(
-            !((is_same_v<BaseRegT, RegEIP> || is_same_v<BaseRegT, RegRIP>) && !is_same_v<IndexRegT, nulltype_t>)
+            !((trait::is_same_v<BaseRegT, RegEIP> || trait::is_same_v<BaseRegT, RegRIP>) && !trait::is_same_v<IndexRegT, nulltype_t>)
             , "Can't use relative with an index register.");
 
         static_assert(
-            is_same_v<x86T, nulltype_t> || (get_op_size<BaseRegT>() != OperandSize::QWord && get_op_size<IndexRegT>() != OperandSize::QWord)
+            trait::is_same_v<x86T, nulltype_t> || (get_op_size<BaseRegT>() != OperandSize::QWord && get_op_size<IndexRegT>() != OperandSize::QWord)
             , "Can't use 64 bit registers in x86 mode.");
 
         using BaseReg = BaseRegT;
@@ -504,49 +518,49 @@ namespace basm {
     template <typename Type>
     constexpr OperandSize get_op_size() {
         if constexpr (
-            is_same_v<Type, RegRAX> ||
-            is_same_v<Type, RegRIP> ||
-            is_same_v<Type, RegRSP> ||
-            is_same_v<Type, RegRBP> ||
-            is_same_v<Type, RegR12> ||
-            is_same_v<Type, RegR13> ||
-            is_same_v<Type, Reg64> ||
-            is_same_v<Type, RegX> ||
-            is_same_v<Type, uint64_t> ||
-            is_same_v<Type, int64_t>)
+            trait::is_same_v<Type, RegRAX> ||
+            trait::is_same_v<Type, RegRIP> ||
+            trait::is_same_v<Type, RegRSP> ||
+            trait::is_same_v<Type, RegRBP> ||
+            trait::is_same_v<Type, RegR12> ||
+            trait::is_same_v<Type, RegR13> ||
+            trait::is_same_v<Type, Reg64> ||
+            trait::is_same_v<Type, RegX> ||
+            trait::is_same_v<Type, uint64_t> ||
+            trait::is_same_v<Type, int64_t>)
                 return OperandSize::QWord;
 
 
         if constexpr (
-            is_same_v<Type, RegEAX> ||
-            is_same_v<Type, RegEIP> ||
-            is_same_v<Type, RegESP> ||
-            is_same_v<Type, RegEBP> ||
-            is_same_v<Type, RegR12D> ||
-            is_same_v<Type, RegR13D> ||
-            is_same_v<Type, Reg32> ||
-            is_same_v<Type, RegXD> ||
-            is_same_v<Type, uint32_t> ||
-            is_same_v<Type, int32_t>)
+            trait::is_same_v<Type, RegEAX> ||
+            trait::is_same_v<Type, RegEIP> ||
+            trait::is_same_v<Type, RegESP> ||
+            trait::is_same_v<Type, RegEBP> ||
+            trait::is_same_v<Type, RegR12D> ||
+            trait::is_same_v<Type, RegR13D> ||
+            trait::is_same_v<Type, Reg32> ||
+            trait::is_same_v<Type, RegXD> ||
+            trait::is_same_v<Type, uint32_t> ||
+            trait::is_same_v<Type, int32_t>)
                 return OperandSize::DWord;
 
         if constexpr (
-            is_same_v<Type, RegAX> ||
-            is_same_v<Type, Reg16> ||
-            is_same_v<Type, RegXW> ||
-            is_same_v<Type, uint16_t> ||
-            is_same_v<Type, int16_t>)
+            trait::is_same_v<Type, RegAX> ||
+            trait::is_same_v<Type, Reg16> ||
+            trait::is_same_v<Type, RegXW> ||
+            trait::is_same_v<Type, uint16_t> ||
+            trait::is_same_v<Type, int16_t>)
                 return OperandSize::Word;
 
         if constexpr (
-            is_same_v<Type, RegAL> ||
-            is_same_v<Type, RegCL> ||
-            is_same_v<Type, Reg8L> ||
-            is_same_v<Type, Reg8H> ||
-            is_same_v<Type, Reg8> ||
-            is_same_v<Type, RegXB> ||
-            is_same_v<Type, uint8_t> ||
-            is_same_v<Type, int8_t>)
+            trait::is_same_v<Type, RegAL> ||
+            trait::is_same_v<Type, RegCL> ||
+            trait::is_same_v<Type, Reg8L> ||
+            trait::is_same_v<Type, Reg8H> ||
+            trait::is_same_v<Type, Reg8> ||
+            trait::is_same_v<Type, RegXB> ||
+            trait::is_same_v<Type, uint8_t> ||
+            trait::is_same_v<Type, int8_t>)
                 return OperandSize::Byte;
 
         if constexpr (is_specialization_of<Type, Memory>::value)
@@ -579,21 +593,21 @@ namespace basm {
             using BaseRegT = typename RegType::BaseReg;
             using is32 = typename RegType::is32;
 
-            if constexpr (is_same_v<is32, true_type>)
+            if constexpr (trait::is_same_v<is32, trait::true_type>)
                 return false;
 
             if constexpr (is_reg_r<IndexRegT>() || is_reg_r<BaseRegT>())
                 return true;
         }
 
-        if constexpr (is_same_v<RegType, Reg8L> || is_reg_r<RegType>() || is_reg64<RegType>())
+        if constexpr (trait::is_same_v<RegType, Reg8L> || is_reg_r<RegType>() || is_reg64<RegType>())
             return true;
         return false;
     }
 
     template <typename RegDest, typename RegSrc>
     constexpr uint8_t op_calculate_rex() {
-        if constexpr (is_same_v<RegDest, nulltype_t> && is_reg_r<RegSrc>())
+        if constexpr (trait::is_same_v<RegDest, nulltype_t> && is_reg_r<RegSrc>())
             return 0x41;
 
 
@@ -603,12 +617,12 @@ namespace basm {
 
         
         // High 8-bit registers suppress REX
-        static_assert(!((op_requires_rex<RegDest>() || op_requires_rex<RegSrc>()) && (is_same_v<RegDest, Reg8H> || is_same_v<RegSrc, Reg8H>)), "Can't encode R8H registers in an instruction requiring REX prefix");
+        static_assert(!((op_requires_rex<RegDest>() || op_requires_rex<RegSrc>()) && (trait::is_same_v<RegDest, Reg8H> || trait::is_same_v<RegSrc, Reg8H>)), "Can't encode R8H registers in an instruction requiring REX prefix");
         
 
         uint8_t rex = 0x40; // Base REX prefix
 
-        //if constexpr (!is_same_v<RegSrc, nulltype_t> && get_op_size<RegDest>() == OperandSize::QWord)
+        //if constexpr (!trait::is_same_v<RegSrc, nulltype_t> && get_op_size<RegDest>() == OperandSize::QWord)
         //    rex |= 0x08; // REX.W
 
         if constexpr (get_op_size<RegDest>() == OperandSize::QWord)
@@ -677,7 +691,7 @@ namespace basm {
     template<typename ValType>
     constexpr void ConstWrite(uint8_t* dest, ValType val) {
         dest[0] = val & 0xFF;
-        if constexpr (is_same_v<ValType, uint64_t>) {
+        if constexpr (trait::is_same_v<ValType, uint64_t>) {
             dest[1] = (val >> 8) & 0xFF;
             dest[2] = (val >> 16) & 0xFF;
             dest[3] = (val >> 24) & 0xFF;
@@ -686,13 +700,13 @@ namespace basm {
             dest[6] = (val >> 48) & 0xFF;
             dest[7] = (val >> 56) & 0xFF;
         }
-        else if constexpr (is_same_v<ValType, uint32_t>) {
+        else if constexpr (trait::is_same_v<ValType, uint32_t>) {
             dest[1] = (val >> 8) & 0xFF;
             dest[2] = (val >> 16) & 0xFF;
             dest[3] = (val >> 24) & 0xFF;
 
         }
-        else if constexpr (is_same_v<ValType, uint16_t>) {
+        else if constexpr (trait::is_same_v<ValType, uint16_t>) {
             dest[1] = (val >> 8) & 0xFF;
         }
 
@@ -710,15 +724,15 @@ namespace basm {
 
         sz++; // MODRM
 
-        if constexpr (!is_same_v<is32, true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+        if constexpr (!trait::is_same_v<is32, trait::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
             sz++;
 
 
         if constexpr (require_disp<BaseRegT, IndexRegT, DispSizeT>())
         {
-            if constexpr (is_same_v<BaseRegT, nulltype_t> || is_same_v<BaseRegT, RegRIP> || is_same_v<BaseRegT, RegEIP>)
+            if constexpr (trait::is_same_v<BaseRegT, nulltype_t> || trait::is_same_v<BaseRegT, RegRIP> || trait::is_same_v<BaseRegT, RegEIP>)
                 sz += 4;
-            else if constexpr (is_same_v<DispSizeT, nulltype_t>)
+            else if constexpr (trait::is_same_v<DispSizeT, nulltype_t>)
                 sz++;
             else
                 sz += size_t(get_op_size<DispSizeT>());
@@ -737,17 +751,17 @@ namespace basm {
         if constexpr (!require_disp<BaseReg, IndexReg, DispSize>())
             return 0b00; // None
 
-        if constexpr (is_same_v<BaseReg, nulltype_t> || is_same_v<BaseReg, RegRIP> || is_same_v<BaseReg, RegEIP>)
+        if constexpr (trait::is_same_v<BaseReg, nulltype_t> || trait::is_same_v<BaseReg, RegRIP> || trait::is_same_v<BaseReg, RegEIP>)
             return 0b10; // DWord
 
-        if constexpr (is_same_v<DispSize, nulltype_t> || get_op_size<DispSize>() == OperandSize::Byte)
+        if constexpr (trait::is_same_v<DispSize, nulltype_t> || get_op_size<DispSize>() == OperandSize::Byte)
             return 0b01; // Byte
 
         return 0b10; // DWord
 
     }
 
-    template <typename MemoryT, typename RegT, typename isSrcMem = nullptr_t>
+    template <typename MemoryT, typename RegT, typename isSrcMem = trait::true_type>
     constexpr void mem_handle_op(uint8_t* out, size_t& index, const MemoryT& mem, const RegT& reg) {
         using IndexRegT = typename MemoryT::IndexReg;
         using BaseRegT = typename MemoryT::BaseReg;
@@ -756,24 +770,24 @@ namespace basm {
 
         constexpr uint8_t mod = mem_get_mod<BaseRegT, IndexRegT, DispSizeT>();
 
-        if constexpr (is_same_v<BaseRegT, RegRIP> || is_same_v<BaseRegT, RegEIP>) {
+        if constexpr (trait::is_same_v<BaseRegT, RegRIP> || trait::is_same_v<BaseRegT, RegEIP>) {
 
-            if constexpr (is_same_v<RegT, nulltype_t>)
+            if constexpr (trait::is_same_v<RegT, nulltype_t>)
                 out[index++] = 0x5;
             else
                 out[index++] = ((reg & 0x7) << 3) | (0x5);
 
         }
         else if constexpr (require_sib<BaseRegT, IndexRegT>()) {
-            if constexpr (is_same_v<BaseRegT, nulltype_t>) {
+            if constexpr (trait::is_same_v<BaseRegT, nulltype_t>) {
 
 
-                if constexpr (is_same_v<RegT, nulltype_t>)
+                if constexpr (trait::is_same_v<RegT, nulltype_t>)
                     out[index++] = 0x4;
                 else
                     out[index++] = ((reg & 0x7) << 3) | (0x4); // (0b00 << 6) | ((reg & 0x7) << 3) | (0x4)
 
-                if constexpr (is_same_v<IndexRegT, nulltype_t>) {
+                if constexpr (trait::is_same_v<IndexRegT, nulltype_t>) {
 
                     out[index++] = 0x25; // Data segment
                 }
@@ -784,18 +798,18 @@ namespace basm {
             }
             else {
 
-                if constexpr (is_same_v<RegT, nulltype_t>)
+                if constexpr (trait::is_same_v<RegT, nulltype_t>)
                     out[index++] = (mod << 6) | 0x4;
                 else
                     out[index++] = (mod << 6) | ((reg & 0x7) << 3) | (0x4);
 
-                if constexpr (is_same_v<IndexRegT, nulltype_t>)
+                if constexpr (trait::is_same_v<IndexRegT, nulltype_t>)
                 {
                     if constexpr (
-                        is_same_v<BaseRegT, RegRSP> ||
-                        is_same_v<BaseRegT, RegESP> ||
-                        is_same_v<BaseRegT, RegR12> ||
-                        is_same_v<BaseRegT, RegR12D>)
+                        trait::is_same_v<BaseRegT, RegRSP> ||
+                        trait::is_same_v<BaseRegT, RegESP> ||
+                        trait::is_same_v<BaseRegT, RegR12> ||
+                        trait::is_same_v<BaseRegT, RegR12D>)
 
                         out[index++] = 0x24;
                     else
@@ -806,9 +820,9 @@ namespace basm {
 
             }
         }
-        else if constexpr (!is_same_v<isSrcMem, nulltype_t>)
+        else if constexpr (!trait::is_same_v<isSrcMem, nulltype_t>)
         {
-            if constexpr (is_same_v<RegT, nulltype_t>)
+            if constexpr (trait::is_same_v<RegT, nulltype_t>)
                 out[index++] = (mod << 6) | (mem.base & 0x7);
             else
                 out[index++] = (mod << 6) | ((reg & 0x7) << 3) | (mem.base & 0x7);
@@ -816,7 +830,7 @@ namespace basm {
         }
         else
         {
-            if constexpr (is_same_v<RegT, nulltype_t>)
+            if constexpr (trait::is_same_v<RegT, nulltype_t>)
                 out[index++] = (mod << 6) | ((mem.base & 0x7) << 3);
             else
                 out[index++] = (mod << 6) | ((mem.base & 0x7) << 3) | (reg & 0x7);
@@ -825,7 +839,7 @@ namespace basm {
 
 
         if constexpr (mod == 0b01) {
-            if constexpr (is_same_v<DispSizeT, nulltype_t>)
+            if constexpr (trait::is_same_v<DispSizeT, nulltype_t>)
                 ConstWrite<uint8_t>(out + index, static_cast<uint8_t>(0));
             else
                 ConstWrite<uint8_t>(out + index, static_cast<uint8_t>(mem.disp));
@@ -835,7 +849,7 @@ namespace basm {
         else if constexpr (mod == 0b10)
         {
 
-            if constexpr (is_same_v<DispSizeT, nulltype_t>)
+            if constexpr (trait::is_same_v<DispSizeT, nulltype_t>)
                 ConstWrite<uint32_t>(out + index, static_cast<uint32_t>(0));
             else
                 ConstWrite<uint32_t>(out + index, static_cast<uint32_t>(mem.disp));
@@ -860,7 +874,7 @@ namespace basm {
             using BaseRegT = typename FirstType::BaseReg;
             using is32 = typename FirstType::is32;
 
-            if constexpr (!is_same_v<is32, true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+            if constexpr (!trait::is_same_v<is32, trait::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                 out[index++] = 0x67;
         }
         else if constexpr (op2.type == OperandType::Memory) {
@@ -870,7 +884,7 @@ namespace basm {
             using BaseRegT = typename SecondType::BaseReg;
             using is32 = typename SecondType::is32;
 
-            if constexpr (!is_same_v<is32, true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+            if constexpr (!trait::is_same_v<is32, trait::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                 out[index++] = 0x67;
         }
 
@@ -898,7 +912,7 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP> && !is_same_v<SecondType, RegRIP> && !is_same_v<SecondType, RegEIP>, "MOV: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP> && !trait::is_same_v<SecondType, RegRIP> && !trait::is_same_v<SecondType, RegEIP>, "MOV: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate, "MOV: First operand can't be an Immediate");
             static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Memory, "MOV: Memory to memory is illegal");
             static_assert(op1.type != OperandType::None, "MOV: Unknown first operand type");
@@ -948,8 +962,8 @@ namespace basm {
 
         static constexpr size_t size = calc_array_size();
 
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, SecondType>(out.data(), index);
@@ -1000,7 +1014,7 @@ namespace basm {
                         out[index] += 0x1;
                     index++;
 
-                    mem_handle_op<SecondType, FirstType, true_type>(out.data(), index, op2_val, op1_val);
+                    mem_handle_op<SecondType, FirstType, trait::true_type>(out.data(), index, op2_val, op1_val);
                 }
 
             }
@@ -1041,13 +1055,13 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
 
 
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1063,7 +1077,7 @@ namespace basm {
         SecondType op2_val;
 
         static constexpr size_t calc_array_size() {
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP> && !is_same_v<SecondType, RegRIP> && !is_same_v<SecondType, RegEIP>, "LEA: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP> && !trait::is_same_v<SecondType, RegRIP> && !trait::is_same_v<SecondType, RegEIP>, "LEA: Can't use RIP/EIP");
 
             static_assert(op1.type == OperandType::Register && op2.type == OperandType::Memory, "LEA: Operand structure has to be in REG, MEM format");
 
@@ -1090,22 +1104,22 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, SecondType>(out.data(), index);
             out[index++] = 0x8D;
-            mem_handle_op<SecondType, FirstType, true_type>(out.data(), index, op2_val, op1_val);
+            mem_handle_op<SecondType, FirstType, trait::true_type>(out.data(), index, op2_val, op1_val);
 
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1125,7 +1139,7 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP> && !is_same_v<SecondType, RegRIP> && !is_same_v<SecondType, RegEIP>, "ARITH: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP> && !trait::is_same_v<SecondType, RegRIP> && !trait::is_same_v<SecondType, RegEIP>, "ARITH: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate, "ARITH: First operand can't be an Immediate");
             static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Memory, "ARITH: Memory to memory is illegal");
             static_assert(op1.type != OperandType::None, "ARITH: Unknown first operand type");
@@ -1181,8 +1195,8 @@ namespace basm {
 
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, SecondType>(out.data(), index);
@@ -1241,7 +1255,7 @@ namespace basm {
                         out[index] += 0x1;
                     index++;
 
-                    mem_handle_op<SecondType, FirstType, true_type>(out.data(), index, op2_val, op1_val);
+                    mem_handle_op<SecondType, FirstType, trait::true_type>(out.data(), index, op2_val, op1_val);
                 }
 
             }
@@ -1288,11 +1302,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1311,19 +1325,19 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP> && !is_same_v<SecondType, RegRIP> && !is_same_v<SecondType, RegEIP>, "Shift/Rotate: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP> && !trait::is_same_v<SecondType, RegRIP> && !trait::is_same_v<SecondType, RegEIP>, "Shift/Rotate: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate, "Shift/Rotate: First operand can't be an Immediate");
 
             static_assert(op1.type != OperandType::None, "Shift/Rotate: Unknown first operand type");
-            static_assert(is_same_v<SecondType, true_type> || op2.type != OperandType::None, "Shift/Rotate: Unknown second operand type");
+            static_assert(trait::is_same_v<SecondType, trait::true_type> || op2.type != OperandType::None, "Shift/Rotate: Unknown second operand type");
 
             static_assert(op1.size != OperandSize::None, "Shift/Rotate: Unknown first operand size");
-            static_assert(is_same_v<SecondType, true_type> || op2.size != OperandSize::None, "Shift/Rotate: Unknown second operand size");
+            static_assert(trait::is_same_v<SecondType, trait::true_type> || op2.size != OperandSize::None, "Shift/Rotate: Unknown second operand size");
             
 
             static_assert(
-                is_same_v<SecondType, RegCL> ||
-                is_same_v<SecondType, true_type> ||
+                trait::is_same_v<SecondType, RegCL> ||
+                trait::is_same_v<SecondType, trait::true_type> ||
                 (op2.type == OperandType::Immediate && op2.size == OperandSize::Byte)
                 , "Shift/Rotate: Invalid source operand");
 
@@ -1349,8 +1363,8 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, SecondType>(out.data(), index);
@@ -1359,7 +1373,7 @@ namespace basm {
 
             if constexpr (op2.type == OperandType::Register)
                 out[index] = 0xD2; // rol mem, cl
-            else if constexpr (is_same_v<SecondType, true_type>)
+            else if constexpr (trait::is_same_v<SecondType, trait::true_type>)
                 out[index] = 0xD0; // rol mem, 1
 
 
@@ -1379,11 +1393,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1399,7 +1413,7 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP>, "Unary Arith: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP>, "Unary Arith: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate, "Unary Arith: First operand can't be an Immediate");
 
             static_assert(op1.type != OperandType::None, "Unary Arith: Unknown first operand type");
@@ -1423,8 +1437,8 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, nulltype_t>(out.data(), index);
@@ -1445,11 +1459,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1467,17 +1481,17 @@ namespace basm {
         ThirdType op3_val;
 
         static constexpr size_t calc_array_size() {
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP> && !is_same_v<SecondType, RegRIP> && !is_same_v<SecondType, RegEIP>, "IMUL: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP> && !trait::is_same_v<SecondType, RegRIP> && !trait::is_same_v<SecondType, RegEIP>, "IMUL: Can't use RIP/EIP");
             static_assert(op1.type == OperandType::Register, "IMUL: First operand must be a register");
             static_assert(op2.type == OperandType::Register || op2.type == OperandType::Memory, "IMUL: Second operand must be register or memory");
-            static_assert(is_same_v<ThirdType, nulltype_t> || op3.type == OperandType::Immediate, "IMUL: Third operand must be immediate");
+            static_assert(trait::is_same_v<ThirdType, nulltype_t> || op3.type == OperandType::Immediate, "IMUL: Third operand must be immediate");
             static_assert(op1.size == op2.size, "IMUL: Operand size mismatch");
             static_assert(op1.size == OperandSize::Word || op1.size == OperandSize::DWord || op1.size == OperandSize::QWord, "IMUL: Invalid operand size");
-            static_assert(is_same_v<ThirdType, nulltype_t> || (op3.size == OperandSize::Byte || op3.size == OperandSize::DWord), "IMUL: Invalid immediate size");
+            static_assert(trait::is_same_v<ThirdType, nulltype_t> || (op3.size == OperandSize::Byte || op3.size == OperandSize::DWord), "IMUL: Invalid immediate size");
 
             size_t sz = 1; // Base opcode
 
-            if constexpr (is_same_v<ThirdType, nulltype_t>)
+            if constexpr (trait::is_same_v<ThirdType, nulltype_t>)
                 sz++; // Extra byte for 0x0F prefix
 
             if constexpr (op_calculate_rex<SecondType, FirstType>() != 0)
@@ -1491,7 +1505,7 @@ namespace basm {
             else
                 sz++; // For ModRM byte
 
-            if constexpr (!is_same_v<ThirdType, nulltype_t>) {
+            if constexpr (!trait::is_same_v<ThirdType, nulltype_t>) {
                 if constexpr (op3.size == OperandSize::Byte)
                     sz++;
                 else
@@ -1502,20 +1516,20 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<SecondType, FirstType>(out.data(), index);
 
-            if constexpr (is_same_v<ThirdType, nulltype_t>) {
+            if constexpr (trait::is_same_v<ThirdType, nulltype_t>) {
                 out[index++] = 0x0F;
                 out[index++] = 0xAF;
 
                 if constexpr (op2.type == OperandType::Register)
                     out[index++] = 0xC0 | ((op1_val & 0x7) << 3) | (op2_val & 0x7);
                 else
-                    mem_handle_op<SecondType, FirstType, true_type>(out.data(), index, op2_val, op1_val);
+                    mem_handle_op<SecondType, FirstType, trait::true_type>(out.data(), index, op2_val, op1_val);
             }
             else {
                 if constexpr (op3.size == OperandSize::Byte)
@@ -1526,7 +1540,7 @@ namespace basm {
                 if constexpr (op2.type == OperandType::Register)
                     out[index++] = 0xC0 | ((op1_val & 0x7) << 3) | (op2_val & 0x7);
                 else
-                    mem_handle_op<SecondType, FirstType, true_type>(out.data(), index, op2_val, op1_val);
+                    mem_handle_op<SecondType, FirstType, trait::true_type>(out.data(), index, op2_val, op1_val);
 
                 if constexpr (op3.size == OperandSize::Byte)
                     ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op3_val));
@@ -1537,12 +1551,12 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
 
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1558,7 +1572,7 @@ namespace basm {
         SecondType op2_val;
 
         static constexpr size_t calc_array_size() {
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP> && !is_same_v<SecondType, RegRIP> && !is_same_v<SecondType, RegEIP>, "TEST: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP> && !trait::is_same_v<SecondType, RegRIP> && !trait::is_same_v<SecondType, RegEIP>, "TEST: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::Immediate || op2.type != OperandType::Immediate, "TEST: Can't use two immediate operands");
             static_assert(op1.type != OperandType::Memory || op2.type != OperandType::Memory, "TEST: Memory to memory is illegal");
             static_assert(op1.type != OperandType::Immediate, "TEST: First operand can't be an immediate");
@@ -1607,8 +1621,8 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             handle_prefix<FirstType, SecondType>(out.data(), index);
@@ -1648,7 +1662,7 @@ namespace basm {
                     if constexpr (op2.type == OperandType::Register)
                         out[index++] = 0xC0 | ((op2_val & 0x7) << 3) | (op1_val & 0x7);
                     else
-                        mem_handle_op<SecondType, FirstType, true_type>(out.data(), index, op2_val, op1_val);
+                        mem_handle_op<SecondType, FirstType, trait::true_type>(out.data(), index, op2_val, op1_val);
                 }
                 
             }
@@ -1679,10 +1693,10 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             return encode_header();
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             return encode_header();
         }
     };
@@ -1711,8 +1725,8 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             if constexpr (op1.size == OperandSize::DWord)
@@ -1732,11 +1746,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1751,20 +1765,20 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP>, "JMP/CALL: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP>, "JMP/CALL: Can't use RIP/EIP");
 
             static_assert(op1.type != OperandType::None, "JMP/CALL: Unknown first operand type");
 
             static_assert(op1.size != OperandSize::None, "JMP/CALL: Unknown first operand size");
             static_assert(op1.type == OperandType::Immediate || op1.size != OperandSize::Byte, "JMP/CALL: Only an immediate operand can be used as an 8-bit operand.");
             static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "JMP/CALL: Can't use 64 bit immediate.");
-            static_assert(is_same_v<x86, true_type> || !(op1.type == OperandType::Register && op1.size == OperandSize::DWord), "JMP/CALL: Can't use 32 bit registers in x64 mode.");
-            static_assert(!is_same_v<x86, true_type> || op1.size != OperandSize::QWord, "JMP/CALL: Can't use 64 bit registers in x86 mode.");
+            static_assert(trait::is_same_v<x86, trait::true_type> || !(op1.type == OperandType::Register && op1.size == OperandSize::DWord), "JMP/CALL: Can't use 32 bit registers in x64 mode.");
+            static_assert(!trait::is_same_v<x86, trait::true_type> || op1.size != OperandSize::QWord, "JMP/CALL: Can't use 64 bit registers in x86 mode.");
 
             size_t sz = 1;
 
             if constexpr (op1.type == OperandType::Immediate) {
-                if constexpr (is_same_v<AllowShort, true_type> && op1.size == OperandSize::Byte)
+                if constexpr (trait::is_same_v<AllowShort, trait::true_type> && op1.size == OperandSize::Byte)
                     sz++;
                 else
                     sz += 4;
@@ -1774,7 +1788,7 @@ namespace basm {
                 if constexpr (rex != 0 && rex != 0x40)
                     sz++;
 
-                if constexpr (op1.size == OperandSize::Word || (!is_same_v<x86, true_type> && op1.size == OperandSize::DWord))
+                if constexpr (op1.size == OperandSize::Word || (!trait::is_same_v<x86, trait::true_type> && op1.size == OperandSize::DWord))
                     sz++;
 
                 if constexpr (op1.type == OperandType::Memory)
@@ -1787,20 +1801,20 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             if constexpr (op1.type == OperandType::Immediate) {
 
-                if constexpr (is_same_v<AllowShort, true_type> && op1.size == OperandSize::Byte)
+                if constexpr (trait::is_same_v<AllowShort, trait::true_type> && op1.size == OperandSize::Byte)
                 {
                     out[index++] = 0xEB;
                     ConstWrite<uint8_t>(out.data() + index, static_cast<uint8_t>(op1_val));
                 }
                 else
                 {
-                    if constexpr (is_same_v<AllowShort, true_type>)
+                    if constexpr (trait::is_same_v<AllowShort, trait::true_type>)
                         out[index++] = 0xE9;
                     else
                         out[index++] = 0xE8;
@@ -1817,11 +1831,11 @@ namespace basm {
                     using BaseRegT = typename FirstType::BaseReg;
                     using is32 = typename FirstType::is32;
 
-                    if constexpr (!is_same_v<is32, true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                    if constexpr (!trait::is_same_v<is32, trait::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                         out[index++] = 0x67;
                 }
 
-                if constexpr (op1.size == OperandSize::Word || (!is_same_v<x86, true_type> && op1.size == OperandSize::DWord))
+                if constexpr (op1.size == OperandSize::Word || (!trait::is_same_v<x86, trait::true_type> && op1.size == OperandSize::DWord))
                     out[index++] = 0x66;
 
                 constexpr uint8_t rex = op_calculate_rex<nulltype_t, FirstType>();
@@ -1835,7 +1849,7 @@ namespace basm {
                     out[index++] = 0xC0 | (op_ext << 3) | (op1_val & 0x7);
                 else if constexpr (op1.type == OperandType::Memory)
                 {
-                    if constexpr (!is_same_v<x86, true_type> && op1.size == OperandSize::DWord)
+                    if constexpr (!trait::is_same_v<x86, trait::true_type> && op1.size == OperandSize::DWord)
                         mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, uint8_t(op_ext + 1));
                     else
                         mem_handle_op<FirstType, uint8_t>(out.data(), index, op1_val, op_ext);
@@ -1847,11 +1861,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1865,15 +1879,15 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP>, "PUSH: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP>, "PUSH: Can't use RIP/EIP");
 
             static_assert(op1.type != OperandType::None, "PUSH: Unknown first operand type");
 
             static_assert(op1.size != OperandSize::None, "PUSH: Unknown first operand size");
             static_assert(op1.type == OperandType::Immediate || op1.size != OperandSize::Byte, "PUSH: Only an immediate operand can be used as an 8-bit operand.");
             static_assert(!(op1.type == OperandType::Immediate && op1.size == OperandSize::QWord), "PUSH: Can't use 64 bit immediate.");
-            static_assert(op1.type == OperandType::Immediate || is_same_v<x86, true_type> || op1.size != OperandSize::DWord, "PUSH: Can't use 32 bit operands in x64 mode.");
-            static_assert(!is_same_v<x86, true_type> || op1.size != OperandSize::QWord, "PUSH: Can't use 64 bit registers in x86 mode.");
+            static_assert(op1.type == OperandType::Immediate || trait::is_same_v<x86, trait::true_type> || op1.size != OperandSize::DWord, "PUSH: Can't use 32 bit operands in x64 mode.");
+            static_assert(!trait::is_same_v<x86, trait::true_type> || op1.size != OperandSize::QWord, "PUSH: Can't use 64 bit registers in x86 mode.");
 
 
             size_t sz = 1;
@@ -1901,8 +1915,8 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             if constexpr (op1.type == OperandType::Immediate) {
@@ -1927,7 +1941,7 @@ namespace basm {
                     using is32 = typename FirstType::is32;
 
 
-                    if constexpr (!is_same_v<is32, true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                    if constexpr (!trait::is_same_v<is32, trait::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                         out[index++] = 0x67;
                 }
 
@@ -1955,11 +1969,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -1974,13 +1988,13 @@ namespace basm {
 
         static constexpr size_t calc_array_size() {
 
-            static_assert(!is_same_v<FirstType, RegRIP> && !is_same_v<FirstType, RegEIP>, "POP: Can't use RIP/EIP");
+            static_assert(!trait::is_same_v<FirstType, RegRIP> && !trait::is_same_v<FirstType, RegEIP>, "POP: Can't use RIP/EIP");
             static_assert(op1.type != OperandType::None, "POP: Unknown first operand type");
             static_assert(op1.size != OperandSize::None, "POP: Unknown first operand size");
             static_assert(op1.type != OperandType::Immediate, "POP: Can't use an immediate operand.");
 
-            static_assert(op1.type == OperandType::Immediate || is_same_v<x86, true_type> || op1.size != OperandSize::DWord, "POP: Can't use 32 bit operands in x64 mode.");
-            static_assert(!is_same_v<x86, true_type> || op1.size != OperandSize::QWord, "POP: Can't use 64 bit registers in x86 mode.");
+            static_assert(op1.type == OperandType::Immediate || trait::is_same_v<x86, trait::true_type> || op1.size != OperandSize::DWord, "POP: Can't use 32 bit operands in x64 mode.");
+            static_assert(!trait::is_same_v<x86, trait::true_type> || op1.size != OperandSize::QWord, "POP: Can't use 64 bit registers in x86 mode.");
 
 
             size_t sz = 1;
@@ -1996,8 +2010,8 @@ namespace basm {
         }
 
         static constexpr size_t size = calc_array_size();
-        constexpr static_array<uint8_t, size> encode_header() const {
-            static_array<uint8_t, size> out = {};
+        constexpr trait::array<uint8_t, size> encode_header() const {
+            trait::array<uint8_t, size> out = {};
             size_t index = 0;
 
             if constexpr (op1.type == OperandType::Memory) {
@@ -2007,7 +2021,7 @@ namespace basm {
                 using is32 = typename FirstType::is32;
 
 
-                if constexpr (!is_same_v<is32, true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
+                if constexpr (!trait::is_same_v<is32, trait::true_type> && (is_reg32<BaseRegT>() || is_reg32<IndexRegT>()))
                     out[index++] = 0x67;
             }
 
@@ -2032,11 +2046,11 @@ namespace basm {
             return out;
         }
 
-        inline static_array<uint8_t, size> encode() const {
+        inline trait::array<uint8_t, size> encode() const {
             auto header = encode_header();
             return header;
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
             auto header = encode_header();
             return header;
         }
@@ -2047,7 +2061,7 @@ namespace basm {
     struct FixedSizeInstr {
         FixedInstrType opcode;
         static constexpr size_t size = 1;
-        constexpr static_array<uint8_t, size> encode() const {
+        constexpr trait::array<uint8_t, size> encode() const {
             return { static_cast<uint8_t>(opcode) };
         }
     };
@@ -2058,15 +2072,15 @@ namespace basm {
         const uint64_t hash;
         InstrT instr;
         static constexpr size_t size = InstrT::size;
-        constexpr static_array<uint8_t, size> encode() const {
-            if constexpr (is_same_v<InstrT, nulltype_t>)
-                return static_array<uint8_t, size> {};
+        constexpr trait::array<uint8_t, size> encode() const {
+            if constexpr (trait::is_same_v<InstrT, nulltype_t>)
+                return trait::array<uint8_t, size> {};
             else
                 return instr.encode();
         }
-        constexpr static_array<uint8_t, size> encode_constexpr() const {
-            if constexpr (is_same_v<InstrT, nulltype_t>)
-                return static_array<uint8_t, size> {};
+        constexpr trait::array<uint8_t, size> encode_constexpr() const {
+            if constexpr (trait::is_same_v<InstrT, nulltype_t>)
+                return trait::array<uint8_t, size> {};
             else
                 return instr.encode_constexpr();
         }
@@ -2077,11 +2091,11 @@ namespace basm {
     struct ByteInstr {
         static constexpr size_t size = sizeof...(Bytes);
 
-        static_array<uint8_t, size> bytes_array;
+        trait::array<uint8_t, size> bytes_array;
 
         constexpr ByteInstr(Bytes... bytes) : bytes_array{ static_cast<uint8_t>(bytes)... } {}
 
-        constexpr static_array<uint8_t, size> encode() const {
+        constexpr trait::array<uint8_t, size> encode() const {
             return bytes_array;
         }
     };
@@ -2101,12 +2115,12 @@ namespace basm {
         using RestT = count_label_instr<Rest...>;
 
         static constexpr size_t total = is_specialization_of<First, LabelInstr>::value + RestT::total;
-        static constexpr size_t label = (is_same_v<First, LabelInstr<nulltype_t>> ? 1 : 0) + RestT::label;
+        static constexpr size_t label = (trait::is_same_v<First, LabelInstr<nulltype_t>> ? 1 : 0) + RestT::label;
     };
 
 
     template<size_t len, size_t len2>
-    constexpr void relocate_targets(uint8_t* arr, static_array<uint64_t, len> &labels, static_array<pair<uint64_t, uint64_t>, len2>& label_instrs) {
+    constexpr void relocate_targets(uint8_t* arr, trait::array<uint64_t, len> &labels, trait::array<trait::pair<uint64_t, uint64_t>, len2>& label_instrs) {
         for (size_t j = 0; j < len2; j++) {
 
             size_t offset = label_instrs[j].first;
@@ -2118,10 +2132,10 @@ namespace basm {
 
     // ---- Dynamic Assembler Core ----
     template<typename... Instrs>
-    static_array<uint8_t, total_size<Instrs...>> assemble(const Instrs&... instrs) {
+    trait::array<uint8_t, total_size<Instrs...>> assemble(const Instrs&... instrs) {
         static_assert(total_size<Instrs...> < 1024, "Exceeds the stack limit");
 
-        static_array<uint8_t, total_size<Instrs...>> code = {};
+        trait::array<uint8_t, total_size<Instrs...>> code = {};
         size_t offset = 0;
 
         using CountLabelT = count_label_instr<Instrs...>;
@@ -2130,8 +2144,8 @@ namespace basm {
         constexpr bool has_label = label_len > 0;
         constexpr size_t labelinstr_len = (has_label ? CountLabelT::total - label_len : 0);
 
-        static_array<uint64_t, label_len> labels = {};
-        static_array<pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
+        trait::array<uint64_t, label_len> labels = {};
+        trait::array<trait::pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
 
         size_t labelinstr_index = 0;
 
@@ -2147,14 +2161,14 @@ namespace basm {
            
             if constexpr (has_label) {
 
-                using InstrT = remove_cvref_t<decltype(instr)>;
+                using InstrT = trait::remove_cvref_t<decltype(instr)>;
 
                 if constexpr (is_specialization_of<InstrT, LabelInstr>::value)
                 {
-                    if constexpr (is_same_v<InstrT, LabelInstr<nulltype_t>>)
+                    if constexpr (trait::is_same_v<InstrT, LabelInstr<nulltype_t>>)
                         labels[instr.hash % label_len] = offset;
                     else
-                        label_instrs[labelinstr_index++] = pair(offset + byte_count - 4, instr.hash);
+                        label_instrs[labelinstr_index++] = trait::pair(offset + byte_count - 4, instr.hash);
                 }
 
             }
@@ -2174,7 +2188,7 @@ namespace basm {
     template <typename... Instrs>
     constexpr auto assemble_static(const Instrs&... instrs) {
         static_assert(total_size<Instrs...> < 1024, "Exceeds the stack limit");
-        static_array<uint8_t, total_size<Instrs...>> code{};
+        trait::array<uint8_t, total_size<Instrs...>> code{};
 
         using CountLabelT = count_label_instr<Instrs...>;
 
@@ -2182,8 +2196,8 @@ namespace basm {
         constexpr bool has_label = label_len > 0;
         constexpr size_t labelinstr_len = (has_label ? CountLabelT::total - label_len : 0);
 
-        static_array<uint64_t, label_len> labels = {};
-        static_array<pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
+        trait::array<uint64_t, label_len> labels = {};
+        trait::array<trait::pair<uint64_t, uint64_t>, labelinstr_len> label_instrs = {};
 
         size_t labelinstr_index = 0;
 
@@ -2192,7 +2206,7 @@ namespace basm {
         auto emit = [&](auto&& instr) constexpr {
 
             const auto bytes = [&] {
-                if constexpr (requires { declval<remove_reference_t<decltype(instr)>>().encode_constexpr(); })
+                if constexpr (requires { trait::declval<trait::remove_reference_t<decltype(instr)>>().encode_constexpr(); })
                     return instr.encode_constexpr();
                 else
                     return instr.encode();
@@ -2210,11 +2224,11 @@ namespace basm {
                 
                 if constexpr (has_label) {
 
-                    using InstrT = remove_cvref_t<decltype(instr)>;
+                    using InstrT = trait::remove_cvref_t<decltype(instr)>;
 
                     if constexpr (is_specialization_of<InstrT, LabelInstr>::value)
                     {
-                        if constexpr (is_same_v<InstrT, LabelInstr<nulltype_t>>)
+                        if constexpr (trait::is_same_v<InstrT, LabelInstr<nulltype_t>>)
                             labels[instr.hash % label_len] = offset;
                         else
                             label_instrs[labelinstr_index++] = pair(offset + byte_count - 4, instr.hash);
@@ -2253,63 +2267,63 @@ namespace basm {
 
 
     // [RAX + 0x100]
-    template <typename BaseT, typename DispSizeT, typename = enable_if_t<is_register<BaseT>() && is_imm<DispSizeT>()>>
+    template <typename BaseT, typename DispSizeT, typename = trait::enable_if_t<is_register<BaseT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, nulltype_t, DispSizeT> operator+(BaseT base, DispSizeT disp) {
         return  { base, {}, SCALING_NONE, disp };
     }
 
     // [RAX - 0x100]
-    template <typename BaseT, typename DispSizeT, typename = enable_if_t<is_register<BaseT>() && is_imm<DispSizeT>()>>
+    template <typename BaseT, typename DispSizeT, typename = trait::enable_if_t<is_register<BaseT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, nulltype_t, DispSizeT> operator-(BaseT base, DispSizeT disp) {
         return  { base, {}, SCALING_NONE, disp * -1 };
     }
 
     // [RAX + RBX]
-    template <typename BaseT, typename IndexT, typename = enable_if_t<is_register<BaseT>() && is_register<IndexT>()>>
+    template <typename BaseT, typename IndexT, typename = trait::enable_if_t<is_register<BaseT>() && is_register<IndexT>()>>
     constexpr MemoryBuilder<BaseT, IndexT> operator+(BaseT base, IndexT index) {
         return { base, index, SCALING_NONE, {} };
     }
 
     // [ (RAX + RBX) + (0x100) ] or [ ( RAX + RBX * SCALING_W ) + (0x100) ]
-    template <typename BaseT, typename IndexT, typename DispSizeT, typename = enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
+    template <typename BaseT, typename IndexT, typename DispSizeT, typename = trait::enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, IndexT, DispSizeT> operator+(MemoryBuilder<BaseT, IndexT, nulltype_t> mb, DispSizeT disp) {
         return { mb.base, mb.index, mb.scale, disp };
     }
 
     // [ (RAX + RBX) - (0x100) ] or [ ( RAX + RBX * SCALING_W ) - (0x100) ]
-    template <typename BaseT, typename IndexT, typename DispSizeT, typename = enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
+    template <typename BaseT, typename IndexT, typename DispSizeT, typename = trait::enable_if_t<is_register<BaseT>() && is_register<IndexT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<BaseT, IndexT, DispSizeT> operator-(MemoryBuilder<BaseT, IndexT, nulltype_t> mb, DispSizeT disp) {
         return { mb.base, mb.index, mb.scale, disp * -1 };
     }
 
     // [RAX * SCALING_W]
-    template <typename IndexT, typename = enable_if_t<is_register<IndexT>()>>
+    template <typename IndexT, typename = trait::enable_if_t<is_register<IndexT>()>>
     constexpr MemoryBuilder<nulltype_t, IndexT, nulltype_t> operator*(IndexT index, ScalingSize scale) {
 
         return { {}, index, scale, {} };
     }
 
     // [(RAX * SCALING_W) + 0x100]
-    template <typename IndexT, typename DispSizeT, typename = enable_if_t<is_register<IndexT>() && is_imm<DispSizeT>()>>
+    template <typename IndexT, typename DispSizeT, typename = trait::enable_if_t<is_register<IndexT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<nulltype_t, IndexT, DispSizeT> operator+(MemoryBuilder<nulltype_t, IndexT, nulltype_t> mb, DispSizeT disp) {
         return { {}, mb.index, mb.scale, disp };
     }
 
     // [(RAX * SCALING_W) - 0x100]
-    template <typename IndexT, typename DispSizeT, typename = enable_if_t<is_register<IndexT>() && is_imm<DispSizeT>()>>
+    template <typename IndexT, typename DispSizeT, typename = trait::enable_if_t<is_register<IndexT>() && is_imm<DispSizeT>()>>
     constexpr MemoryBuilder<nulltype_t, IndexT, DispSizeT> operator-(MemoryBuilder<nulltype_t, IndexT, nulltype_t> mb, DispSizeT disp) {
         return { {}, mb.index, mb.scale, disp * -1 };
     }
 
     // [RAX + (RBX * SCALING_W)]
-    template <typename BaseT, typename IndexT, typename = enable_if_t<is_register<BaseT>() && is_register<IndexT>()>>
+    template <typename BaseT, typename IndexT, typename = trait::enable_if_t<is_register<BaseT>() && is_register<IndexT>()>>
     constexpr MemoryBuilder<BaseT, IndexT, nulltype_t> operator+(BaseT base, MemoryBuilder<nulltype_t, IndexT, nulltype_t> mb) {
         return { base, mb.index, mb.scale, {} };
     }
 
 
     // Avoiding REG * NUM to prevent arithmetic multiplication. (There is a scaling enum instead)
-    template <typename RegT, typename = enable_if_t<is_register<RegT>()>>
+    template <typename RegT, typename = trait::enable_if_t<is_register<RegT>()>>
     constexpr void operator*(RegT reg, int imm) {
 
     }
@@ -2327,7 +2341,7 @@ namespace basm {
 
             if constexpr (is_register<BaseT>())
                 return Memory<Size, BaseT, nulltype_t, nulltype_t, x86>{base, {}, SCALING_NONE, {}};
-            else if constexpr(is_same_v<x86, true_type>)
+            else if constexpr(trait::is_same_v<x86, trait::true_type>)
                 return Memory<Size, RegEIP, nulltype_t, BaseT, x86>{ EIP, {}, SCALING_NONE, base};
             else
                 return Memory<Size, nulltype_t, nulltype_t, BaseT, x86>{{}, {}, SCALING_NONE, base};
@@ -2344,26 +2358,26 @@ namespace basm {
     };
 
     struct Mem32Proxy {
-        static constexpr MemSizeProxy<uint8_t, true_type>  BYTE{};
-        static constexpr MemSizeProxy<uint16_t, true_type>  WORD{};
-        static constexpr MemSizeProxy<uint32_t, true_type> DWORD{};
+        static constexpr MemSizeProxy<uint8_t, trait::true_type>  BYTE{};
+        static constexpr MemSizeProxy<uint16_t, trait::true_type>  WORD{};
+        static constexpr MemSizeProxy<uint32_t, trait::true_type> DWORD{};
     };
 
     constexpr MemProxy MEM {};
     constexpr Mem32Proxy MEM32 {};
 
-    template <typename T, typename = enable_if_t<is_register<T>()>>
+    template <typename T, typename = trait::enable_if_t<is_register<T>()>>
     constexpr auto reg_lower_8(const T type1) {
 
         // Note: RSP, RBP, RSI, RDI registers convert to AH, CH, DH, BH because we can't convert them to type Reg8L
 
-        if constexpr (is_same_v<T, RegRAX> || is_same_v<T, RegEAX> || is_same_v<T, RegAX>)
+        if constexpr (trait::is_same_v<T, RegRAX> || trait::is_same_v<T, RegEAX> || trait::is_same_v<T, RegAX>)
             return RegAL(type1);
 
-        if constexpr (is_same_v<T, RegRSP> || is_same_v<T, RegESP> || is_same_v<T, RegRBP> || is_same_v<T, RegEBP>)
+        if constexpr (trait::is_same_v<T, RegRSP> || trait::is_same_v<T, RegESP> || trait::is_same_v<T, RegRBP> || trait::is_same_v<T, RegEBP>)
             return Reg8L(type1);
 
-        if constexpr (is_same_v<T, RegX> || is_same_v<T, RegR12> || is_same_v<T, RegR13> || is_same_v<T, RegR12D> || is_same_v<T, RegR13D>)
+        if constexpr (trait::is_same_v<T, RegX> || trait::is_same_v<T, RegR12> || trait::is_same_v<T, RegR13> || trait::is_same_v<T, RegR12D> || trait::is_same_v<T, RegR13D>)
             return RegXB(type1);
 
         return Reg8(type1);
@@ -2389,12 +2403,12 @@ namespace basm {
     }
 
     constexpr auto JMP(const uint64_t hash) {
-        using TypeT = JmpInstr<int32_t, nulltype_t, true_type>;
+        using TypeT = JmpInstr<int32_t, nulltype_t, trait::true_type>;
         return LabelInstr<TypeT>{hash, TypeT{ 0, OP_EXTENSION::OP_JMP }};
     }
 
     constexpr auto JMP32(const uint64_t hash) {
-        using TypeT = JmpInstr<int32_t, true_type, true_type>;
+        using TypeT = JmpInstr<int32_t, trait::true_type, trait::true_type>;
         return LabelInstr<TypeT>{hash, TypeT { 0, OP_EXTENSION::OP_JMP }};
 
     }
@@ -2405,7 +2419,7 @@ namespace basm {
     }
 
     constexpr auto CALL32(const uint64_t hash) {
-        using TypeT = JmpInstr<int32_t, true_type>;
+        using TypeT = JmpInstr<int32_t, trait::true_type>;
         return LabelInstr<TypeT>{hash, TypeT{ 0, OP_EXTENSION::OP_CALL }};
     }
 
@@ -2413,7 +2427,7 @@ namespace basm {
 
     template <typename... BytesT>
     constexpr auto DB(BytesT&&... bytes) {
-        return ByteInstr<decay_t<BytesT>...>{forward<BytesT>(bytes)...};
+        return ByteInstr<trait::decay_t<BytesT>...>{trait::forward<BytesT>(bytes)...};
     }
 
     /* Label */
@@ -2510,42 +2524,42 @@ namespace basm {
 
     template <typename T1>
     constexpr auto ROL1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_ROL };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_ROL };
     }
 
     template <typename T1>
     constexpr auto ROR1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_ROR };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_ROR };
     }
 
     template <typename T1>
     constexpr auto RCL1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_RCL };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_RCL };
     }
 
     template <typename T1>
     constexpr auto RCR1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_RCR };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_RCR };
     }
 
     template <typename T1>
     constexpr auto SHL1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_SHL };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_SHL };
     }
 
     template <typename T1>
     constexpr auto SAL1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_SAL };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_SAL };
     }
 
     template <typename T1>
     constexpr auto SHR1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_SHR };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_SHR };
     }
 
     template <typename T1>
     constexpr auto SAR1(T1 type1) {
-        return ShiftRotInstr<T1, true_type> { type1, {}, OP_EXTENSION::OP_SAR };
+        return ShiftRotInstr<T1, trait::true_type> { type1, {}, OP_EXTENSION::OP_SAR };
     }
 
 
@@ -2610,12 +2624,12 @@ namespace basm {
 
     template <typename T1>
     constexpr auto JMP(T1 type1) {
-        return JmpInstr<T1, nulltype_t, true_type> { type1, OP_EXTENSION::OP_JMP };
+        return JmpInstr<T1, nulltype_t, trait::true_type> { type1, OP_EXTENSION::OP_JMP };
     }
 
     template <typename T1>
     constexpr auto JMP32(T1 type1) {
-        return JmpInstr<T1, true_type, true_type> { type1, OP_EXTENSION::OP_JMP };
+        return JmpInstr<T1, trait::true_type, trait::true_type> { type1, OP_EXTENSION::OP_JMP };
     }
 
     template <typename T1>
@@ -2625,7 +2639,7 @@ namespace basm {
 
     template <typename T1>
     constexpr auto CALL32(T1 type1) {
-        return JmpInstr<T1, true_type> { type1, OP_EXTENSION::OP_CALL };
+        return JmpInstr<T1, trait::true_type> { type1, OP_EXTENSION::OP_CALL };
     }
 
     /* Push & Pop */
@@ -2637,7 +2651,7 @@ namespace basm {
 
     template <typename T1>
     constexpr auto PUSH32(T1 type1) {
-        return PushInstr<T1, true_type> { type1 };
+        return PushInstr<T1, trait::true_type> { type1 };
     }
 
     template <typename T1>
@@ -2647,7 +2661,7 @@ namespace basm {
 
     template <typename T1>
     constexpr auto POP32(T1 type1) {
-        return PopInstr<T1, true_type> { type1 };
+        return PopInstr<T1, trait::true_type> { type1 };
     }
 
     /* Fixed Size */
