@@ -8,6 +8,11 @@
 
 A simple and lightweight assembler library that supports the majority of significant instructions from the Intel x86-64 architecture. Mainly beneficial for shellcode development and runtime bytecode generation. Due to its design, it can produce the machine code quite fast while allowing you to generate and use random registers/immediates at runtime.
 
+## Requirements
+
+- C++20 or above
+- STL is not required (Compatible with kernel driver projects)
+
 ## Why not use AsmJit?
 
 If you need to generate x86-64 machine code with minimal overhead and maximum control, `BlazingASM` is a powerful alternative to dynamic assemblers like AsmJit. Designed entirely for compile-time code generation, it emits raw, fixed-size machine instructions directly into static arrays, eliminating the need for runtime encoding or memory management. Its single-header design requires no dependencies, making it lightweight and easy to integrate ~ even in bare-metal or embedded environments. With predictable instruction layout, very little to zero runtime allocation, and clean, assembly-like syntax, it is particularly well-suited for shellcode generation, firmware, code mutation or any scenario where performance, binary size, and determinism matter.
