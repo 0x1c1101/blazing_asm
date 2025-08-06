@@ -128,7 +128,7 @@ namespace trait {
 
     // Empty array
     template <typename T>
-    struct trait::array<T, 0> {
+    struct array<T, 0> {
         constexpr size_t size() const noexcept { return 0; }
         // No data member
     };
