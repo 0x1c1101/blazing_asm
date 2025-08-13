@@ -6,7 +6,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL3-blue.svg)](LICENSE)
 
 
-A simple and lightweight assembler library that supports the majority of significant instructions from the Intel x86-64 architecture. Mainly beneficial for shellcode development and runtime bytecode generation. Due to its design, it can produce the machine code quite fast while allowing you to generate and use random registers/immediates at runtime.
+A simple and lightweight assembler library that supports the majority of significant instructions from the Intel x86-64 architecture. Mainly beneficial for shellcode development. Due to its design, it can produce the machine code quite fast while allowing you to use random registers/immediates at runtime.
 
 ## Requirements
 
@@ -15,15 +15,19 @@ A simple and lightweight assembler library that supports the majority of signifi
 
 ## Why not use AsmJit?
 
-If you need to generate x86-64 machine code with minimal overhead and maximum control, `BlazingASM` is a powerful alternative to dynamic assemblers like AsmJit. Designed entirely for compile-time code generation, it emits raw, fixed-size machine instructions directly into static arrays, eliminating the need for runtime encoding or memory management. Its single-header design requires no dependencies, making it lightweight and easy to integrate ~ even in bare-metal or embedded environments. With predictable instruction layout, very little to zero runtime allocation, and clean, assembly-like syntax, it is particularly well-suited for shellcode generation, firmware, code mutation or any scenario where performance, binary size, and determinism matter.
+If you need to generate x86-64 machine code with minimal overhead, `BlazingASM` is a powerful alternative to dynamic assemblers like AsmJit. Designed for compile-time code generation, it emits raw and fixed-size machine instructions directly into static arrays, eliminating the need for runtime encoding or memory management. Single C++ header makes it really easy to integrate ~ even in kernel or embedded system projects. With a predictable layout, it's able to construct instructions at compile-time while handling dynamic operands at runtime without overhead. Particularly useful in exploit development, low-level code mutation and obfuscation, penetration testing and any scenario where shellcode is involved.
 
-That being said, `BlazingASM` is intentionally minimal and focused; it doesn’t aim to match AsmJit’s vast instruction coverage, runtime flexibility, or feature set. Instead, it trades breadth for simplicity and performance ~ making it a practical tool when you know exactly what code you need, and want it fast and small.
+That being said, `BlazingASM` is intentionally minimal and template focused. It doesn’t aim to match AsmJit’s vast instruction coverage, runtime flexibility, or feature set. Instead, it trades breadth for simplicity and performance ~ making it a practical tool when you know exactly what code you need, and want it fast and small.
 
-For a better demonstration, below is a screenshot of the comparison between the code and the disassembly (`assemble_static()` mode):
+There are two different approaches you can utilize:
+
+#### Static Mode
+For a better demonstration, below is a screenshot of the comparison between the code and the disassembly (with `assemble_static()`):
 
 ![assemble_static_disassembly](https://github.com/user-attachments/assets/97f339c1-a1e7-4b66-a3f6-4e8e3e774ead)
 
-If you wish to use the dynamic code generation, below is a screenshot of the comparison between the code and the decompilation on IDA (`assemble()` mode):
+#### Dynamic Mode
+If you wish to use the dynamic code generation, below is a screenshot of the comparison between the code and the decompilation on IDA (with `assemble()`):
 
 ![assemble_decompile](https://github.com/user-attachments/assets/ffa45f56-aefe-4b4e-afec-241210ca3413)
 
@@ -52,7 +56,7 @@ If you wish to use the dynamic code generation, below is a screenshot of the com
 
 ## Setting it up
 
-All you need to do is download the `blazing_asm.hpp` header file, paste it into your project folder, and add this in your source code:
+All you need to do is download the `blazing_asm.hpp` header file, paste it into your project folder, and write this into your source code:
 
 ```cpp
 #include "blazing_asm.hpp"
@@ -67,15 +71,17 @@ auto shellcode = basm::assemble_static (
 );
 ```
 
-Or you can define `basm` namespace for a simpler syntax:
+You can also use `basm` namespace within a scope for a simpler syntax:
 
 ```cpp
-using namespace basm;
-
-auto shellcode = assemble_static (
-  MOV (RAX, RBX),
-  MOV (RCX, RDX)
-);
+{
+  using namespace basm;
+  
+  auto shellcode = assemble_static (
+    MOV (RAX, RBX),
+    MOV (RCX, RDX)
+  );
+}
 ```
 
 ## Usage
@@ -84,4 +90,4 @@ You can find the detailed explanation in the [Documentation Page](DOCUMENTATION.
 
 ## 🚧 Note
 
-This project is currently in development, so if you come across any problems, please create an issue. Also, feel free to contribute and improve.
+This project is currently in development, so if you come across any problems, please create an issue. Feel free to contribute and improve.
